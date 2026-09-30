@@ -157,7 +157,7 @@ create policy handovers_select on public.shift_handovers
   for select using (org_id in (select public.get_user_org_ids()));
 
 create policy handovers_insert on public.shift_handovers
-  for insert with check (org_id in (select public.get_user_org_ids()) and user_id = auth.uid());
+  for insert with check (org_id in (select public.get_user_org_ids()) and created_by = auth.uid());
 
 -- handover_items: heredan el org_id del handover
 create policy handover_items_select on public.handover_items
@@ -183,7 +183,7 @@ create policy tickets_select on public.maintenance_tickets
   for select using (org_id in (select public.get_user_org_ids()));
 
 create policy tickets_insert on public.maintenance_tickets
-  for insert with check (org_id in (select public.get_user_org_ids()) and user_id = auth.uid());
+  for insert with check (org_id in (select public.get_user_org_ids()) and created_by = auth.uid());
 
 create policy tickets_update on public.maintenance_tickets
   for update using (org_id in (select public.get_user_org_ids()))
