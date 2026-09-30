@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Blindbeds Relevo — Suite de operaciones para hoteles
 
-## Getting Started
+> Handover de turno (FR-005) + Partes de avería (FR-006).
+> Next.js 16 + Supabase + Vercel. PWA mobile-first.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+| Capa | Tecnología |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Auth | Supabase Auth (magic link) |
+| Base de datos | Supabase Postgres + RLS |
+| UI | Tailwind CSS 4 |
+| Tests | Vitest |
+| PWA | Manifest + service worker ready |
+
+## Estructura
+
+```
+src/
+├── app/
+│   ├── login/          # Login con magic link
+│   ├── dashboard/      # Panel principal (pendientes + averías)
+│   ├── handover/new/   # Nuevo relevo de turno
+│   ├── tickets/new/    # Nuevo parte de avería
+│   └── auth/callback/  # Callback de Supabase Auth
+├── components/
+│   ├── auth/           # LoginForm
+│   ├── handover/       # HandoverForm, PendingItems
+│   └── tickets/        # TicketForm, TicketList
+├── lib/
+│   ├── supabase/       # client, server, admin
+│   └── org.ts          # Lógica de organización
+├── types/              # Tipos compartidos
+└── hooks/              # useAuth
+supabase/
+└── migrations/         # 000001_baseline.sql
+tests/                  # Vitest
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Arranque local
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+cp .env.example .env.local   # Rellenar con credenciales de Supabase
+npm run dev                   # http://localhost:3000
+npm test                      # Tests
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Migraciones
 
-## Learn More
+```bash
+npx supabase db push          # Aplica migraciones a Supabase
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Despliegue
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Crear proyecto en Vercel conectado a este repo
+2. Configurar env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+3. Deploy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Módulos
 
-## Deploy on Vercel
+### Handover (FR-005)
+Formulario estructurado de 4 bloques (pendientes, VIPs, incidencias, avisos) que cada empleado rellena al terminar su turno. Los items no resueltos persisten hasta que alguien los cierra.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Averías (FR-006)
+Parte de avería con foto obligatoria, prioridad, y trazabilidad completa por activo. QR scannable por habitación/equipo.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Seguridad
+
+- RLS en las 7 tablas públicas con políticas por organización
+- Auth vía Supabase con magic link (sin contraseñas)
+- Middleware protege todas las rutas excepto /login
+- Fotos en bucket privado scoped por org_id
