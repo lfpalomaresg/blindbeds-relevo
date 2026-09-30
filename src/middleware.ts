@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const publicPaths = ["/login", "/auth/callback", "/manifest.json", "/icon-"];
+  const publicPaths = ["/login", "/auth/callback", "/auth/confirm", "/manifest.json", "/icon-"];
   if (publicPaths.some((p) => request.nextUrl.pathname.startsWith(p))) {
     return NextResponse.next();
   }
