@@ -42,4 +42,27 @@ describe("types — constants", () => {
     const values = TICKET_STATUSES.map((s) => s.value).sort();
     expect(values).toEqual(["abierto", "cerrado", "en_curso"]);
   });
+
+  it("DEPARTMENTS have unique values", () => {
+    const values = DEPARTMENTS.map((d) => d.value);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("SHIFT_TYPES have unique values", () => {
+    const values = SHIFT_TYPES.map((s) => s.value);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("TICKET_PRIORITIES have unique values", () => {
+    const values = TICKET_PRIORITIES.map((p) => p.value);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("TICKET_PRIORITIES all have color", () => {
+    for (const p of TICKET_PRIORITIES) expect(p.color).toBeTruthy();
+  });
+
+  it("TICKET_STATUSES all have color", () => {
+    for (const s of TICKET_STATUSES) expect(s.color).toBeTruthy();
+  });
 });

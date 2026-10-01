@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { decodeQR } from "@/lib/qr";
 
 interface QRScannerProps {
   onScan: (code: string) => void;
@@ -52,7 +53,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
     ctx.drawImage(videoRef.current, 0, 0);
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = findQRInImage(imageData);
+    const code = decodeQR(imageData.data, imageData.width, imageData.height);
 
     if (code) {
       onScan(code);
@@ -93,6 +94,3 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
   );
 }
 
-function findQRInImage(_imageData: ImageData): string | null {
-  return null;
-}
