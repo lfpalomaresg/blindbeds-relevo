@@ -15,10 +15,6 @@ export function TicketList({ orgId }: TicketListProps) {
   const [filter, setFilter] = useState<TicketStatus | "todas">("abierto");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadTickets();
-  }, [orgId, filter]);
-
   async function loadTickets() {
     setLoading(true);
     let query = supabase
@@ -35,6 +31,9 @@ export function TicketList({ orgId }: TicketListProps) {
     if (data) setTickets(data as MaintenanceTicket[]);
     setLoading(false);
   }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadTickets(); }, [orgId, filter]);
 
   async function updateStatus(ticketId: string, newStatus: TicketStatus) {
     const { data: userData } = await supabase.auth.getUser();

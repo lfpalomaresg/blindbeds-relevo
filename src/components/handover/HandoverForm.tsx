@@ -24,10 +24,6 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
-  useEffect(() => {
-    loadPendingItems();
-  }, []);
-
   async function loadPendingItems() {
     const { data } = await supabase
       .from("handover_items")
@@ -38,6 +34,9 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
       .limit(10);
     if (data) setPendingItems(data as HandoverItem[]);
   }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadPendingItems(); }, []);
 
   function updateBlock(block: HandoverBlock, value: string) {
     setItems((prev) => ({ ...prev, [block]: value }));

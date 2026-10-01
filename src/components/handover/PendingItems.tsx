@@ -14,10 +14,6 @@ export function PendingItems({ orgId }: PendingItemsProps) {
   const [items, setItems] = useState<HandoverItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadItems();
-  }, [orgId]);
-
   async function loadItems() {
     setLoading(true);
     const { data } = await supabase
@@ -29,6 +25,9 @@ export function PendingItems({ orgId }: PendingItemsProps) {
     if (data) setItems(data as HandoverItem[]);
     setLoading(false);
   }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadItems(); }, [orgId]);
 
   async function resolveItem(id: string) {
     const { data: userData } = await supabase.auth.getUser();
