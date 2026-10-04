@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { HandoverItem } from "@/types";
 import { HANDOVER_BLOCKS } from "@/types";
@@ -10,24 +10,25 @@ interface PendingItemsProps {
 }
 
 export function PendingItems({ orgId }: PendingItemsProps) {
-  const supabase = createBrowserClient();
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [items, setItems] = useState<HandoverItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function loadItems() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("handover_items")
-      .select("*")
-      .eq("org_id", orgId)
-      .eq("resolved", false)
-      .order("created_at", { ascending: false });
-    if (data) setItems(data as HandoverItem[]);
-    setLoading(false);
-  }
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadItems(); }, [orgId]);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const { data } = await supabase
+        .from("handover_items")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("resolved", false)
+        .order("created_at", { ascending: false });
+      if (!active) return;
+      setItems(data ? (data as HandoverItem[]) : []);
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [orgId, supabase]);
 
   async function resolveItem(id: string) {
     const { data: userData } = await supabase.auth.getUser();

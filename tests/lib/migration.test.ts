@@ -160,6 +160,18 @@ describe("migration 000001_baseline — storage bucket", () => {
   });
 });
 
+describe("migration 000002_relevo_tables", () => {
+  it("references tables already provided by baseline", () => {
+    expect(relevo).toContain("shift_handovers");
+    expect(relevo).toContain("handover_items");
+    expect(relevo).toContain("maintenance_tickets");
+  });
+
+  it("ticket-photos bucket or storage references", () => {
+    expect(relevo).toMatch(/ticket.photos|storage/i);
+  });
+});
+
 describe("migration 000001_baseline — cascades and FKs", () => {
   it("memberships cascade-deletes when org or user removed", () => {
     expect(baseline).toContain("references public.organizations(id) on delete cascade");

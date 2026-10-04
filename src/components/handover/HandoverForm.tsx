@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { HandoverItem, HandoverBlock, Department, ShiftType } from "@/types";
 import { DEPARTMENTS, SHIFT_TYPES, HANDOVER_BLOCKS } from "@/types";
@@ -10,7 +10,7 @@ interface HandoverFormProps {
 }
 
 export function HandoverForm({ orgId }: HandoverFormProps) {
-  const supabase = createBrowserClient();
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [department, setDepartment] = useState<Department>("recepcion");
   const [shiftType, setShiftType] = useState<ShiftType>("manana");
   const [items, setItems] = useState<Record<HandoverBlock, string>>({
@@ -24,19 +24,20 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
-  async function loadPendingItems() {
-    const { data } = await supabase
-      .from("handover_items")
-      .select("*")
-      .eq("org_id", orgId)
-      .eq("resolved", false)
-      .order("created_at", { ascending: false })
-      .limit(10);
-    if (data) setPendingItems(data as HandoverItem[]);
-  }
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadPendingItems(); }, []);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const { data } = await supabase
+        .from("handover_items")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("resolved", false)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (active && data) setPendingItems(data as HandoverItem[]);
+    })();
+    return () => { active = false; };
+  }, [orgId, supabase]);
 
   function updateBlock(block: HandoverBlock, value: string) {
     setItems((prev) => ({ ...prev, [block]: value }));

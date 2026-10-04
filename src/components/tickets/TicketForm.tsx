@@ -170,7 +170,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Foto (obligatoria)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Foto</label>
           <input
             type="file"
             accept="image/*"

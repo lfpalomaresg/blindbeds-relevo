@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { MaintenanceTicket, TicketStatus } from "@/types";
 import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types";
@@ -10,30 +10,28 @@ interface TicketListProps {
 }
 
 export function TicketList({ orgId }: TicketListProps) {
-  const supabase = createBrowserClient();
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
   const [filter, setFilter] = useState<TicketStatus | "todas">("abierto");
   const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
 
-  async function loadTickets() {
-    setLoading(true);
-    let query = supabase
-      .from("maintenance_tickets")
-      .select("*")
-      .eq("org_id", orgId)
-      .order("created_at", { ascending: false });
-
-    if (filter !== "todas") {
-      query = query.eq("status", filter);
-    }
-
-    const { data } = await query;
-    if (data) setTickets(data as MaintenanceTicket[]);
-    setLoading(false);
-  }
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadTickets(); }, [orgId, filter]);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      let query = supabase
+        .from("maintenance_tickets")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false });
+      if (filter !== "todas") query = query.eq("status", filter);
+      const { data } = await query;
+      if (!active) return;
+      setTickets(data ? (data as MaintenanceTicket[]) : []);
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [orgId, filter, tick, supabase]);
 
   async function updateStatus(ticketId: string, newStatus: TicketStatus) {
     const { data: userData } = await supabase.auth.getUser();
@@ -53,7 +51,8 @@ export function TicketList({ orgId }: TicketListProps) {
       created_by: userData.user.id,
     });
 
-    loadTickets();
+    setLoading(true);
+    setTick((t) => t + 1);
   }
 
   function getPriorityColor(p: string) {

@@ -11,12 +11,13 @@ interface QRScannerProps {
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState("");
-  const [scanning, setScanning] = useState(true);
+  const scanActiveRef = useRef(true);
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     startCamera();
     return () => stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function startCamera() {
@@ -36,6 +37,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
   }
 
   function stopCamera() {
+    scanActiveRef.current = false;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -43,7 +45,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
   }
 
   function scanLoop() {
-    if (!scanning || !videoRef.current) return;
+    if (!scanActiveRef.current || !videoRef.current) return;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
