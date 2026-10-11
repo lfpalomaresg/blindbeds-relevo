@@ -126,6 +126,11 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
     it("un usuario de otra org no cumple ningún nivel en org A", async () => {
       expect(await check(staffB, "staff")).toBe(false);
     });
+
+    it("un min_role desconocido nunca se cumple (fallo cerrado), ni para admin", async () => {
+      expect(await check(adminA, "owner")).toBe(false);
+      expect(await check(adminA, "")).toBe(false);
+    });
   });
 
   describe("aislamiento por organización (select)", () => {

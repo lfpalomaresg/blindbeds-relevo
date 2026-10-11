@@ -42,11 +42,14 @@ security definer
 stable
 set search_path = public
 as $$
+  -- Jerarquía estricta staff(1) < supervisor(2) < admin(3). Un min_role
+  -- desconocido exige rango 4 y por tanto nunca se cumple (fallo cerrado).
   select exists (
-    select 1 from public.memberships
-    where org_id = p_org_id
-      and user_id = auth.uid()
-      and (min_role = 'staff' or role in ('supervisor', 'admin') or (min_role = 'supervisor' and role = 'admin'))
+    select 1 from public.memberships m
+    where m.org_id = p_org_id
+      and m.user_id = auth.uid()
+      and (case m.role when 'admin' then 3 when 'supervisor' then 2 when 'staff' then 1 else 0 end)
+          >= (case min_role when 'admin' then 3 when 'supervisor' then 2 when 'staff' then 1 else 4 end)
   );
 $$;
 
