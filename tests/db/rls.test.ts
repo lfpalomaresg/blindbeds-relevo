@@ -277,6 +277,19 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
       expect(await rowCountAs(db, adminA, update, [ASSET_B])).toBe(0);
       expect(await rowCountAs(db, adminA, `delete from public.ticket_assets where id = $1`, [ASSET_B])).toBe(0);
     });
+
+    it("staff y supervisor no borran activos de su org (0 filas); admin borra uno sin partes asociados", async () => {
+      // ASSET_A tiene un parte que lo referencia (FK restrict): si RLS no filtrara, el error sería 23503, no 0 filas.
+      for (const actor of [staffA, supervisorA]) {
+        expect(await rowCountAs(db, actor, `delete from public.ticket_assets where id = $1`, [ASSET_A])).toBe(0);
+      }
+      const deleted = await runAs(db, adminA, async (q) => {
+        await q(insert, [ORG_A, "TEST-NEW-DEL"]);
+        const r = await q(`delete from public.ticket_assets where org_id = $1 and qr_code = 'TEST-NEW-DEL'`, [ORG_A]);
+        return r.rowCount ?? 0;
+      });
+      expect(deleted).toBe(1);
+    });
   });
 
   describe("maintenance_tickets", () => {
@@ -299,6 +312,10 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
       expect(await rowCountAs(db, staffA, update, [TICKET_A])).toBe(1);
       expect(await rowCountAs(db, staffA, update, [TICKET_B])).toBe(0);
       expect(await rowCountAs(db, staffB, update, [TICKET_A])).toBe(0);
+    });
+
+    it("no se puede mover un parte a otra org vía update (with check)", async () => {
+      expect(await errorCodeAs(db, adminA, `update public.maintenance_tickets set org_id = $1 where id = $2`, [ORG_B, TICKET_A])).toBe(RLS_VIOLATION);
     });
 
     it("el check de estado rechaza valores fuera del catálogo", async () => {
