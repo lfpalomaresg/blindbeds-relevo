@@ -59,7 +59,7 @@ function run(opts: { env?: Record<string, string>; withPsql?: boolean } = {}) {
   const path = (opts.withPsql ?? true) ? `${fakeBin}:${process.env.PATH}` : join(work, "nopsqlbin");
   const res = spawnSync("bash", [SCRIPT], {
     cwd: work,
-    env: { PATH: path, HOME: work, FAKE_PSQL_LOG: log, LANG: "C.UTF-8", ...opts.env },
+    env: { NODE_ENV: "test", PATH: path, HOME: work, FAKE_PSQL_LOG: log, LANG: "C.UTF-8", ...opts.env },
     encoding: "utf8",
   });
   return { ...res, out: `${res.stdout}\n${res.stderr}` };
