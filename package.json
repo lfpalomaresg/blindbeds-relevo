@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:rls": "RLS_REQUIRE_PG=1 vitest run tests/db",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

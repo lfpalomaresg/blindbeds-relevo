@@ -4,17 +4,24 @@
  * these tests break first and make the change explicit.
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { resolve } from "path";
 
 const MIGRATION_DIR = resolve(__dirname, "../../supabase/migrations");
+const VARIANT_DIR = resolve(__dirname, "../../supabase/variants/shared-appcc");
 
 let baseline: string;
 let relevo: string;
 
 beforeAll(() => {
   baseline = readFileSync(`${MIGRATION_DIR}/000001_baseline.sql`, "utf-8");
-  relevo = readFileSync(`${MIGRATION_DIR}/000002_relevo_tables.sql`, "utf-8").toLowerCase();
+  relevo = readFileSync(`${VARIANT_DIR}/000002_relevo_tables.sql`, "utf-8").toLowerCase();
+});
+
+describe("supabase/migrations — solo migraciones secuenciales", () => {
+  it("contiene únicamente el baseline (la variante 000002 vive en supabase/variants)", () => {
+    expect(readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql"))).toEqual(["000001_baseline.sql"]);
+  });
 });
 
 const TABLES = [
@@ -160,7 +167,7 @@ describe("migration 000001_baseline — storage bucket", () => {
   });
 });
 
-describe("migration 000002_relevo_tables", () => {
+describe("variant 000002_relevo_tables (shared APPCC project, not applied)", () => {
   it("references tables already provided by baseline", () => {
     expect(relevo).toContain("shift_handovers");
     expect(relevo).toContain("handover_items");

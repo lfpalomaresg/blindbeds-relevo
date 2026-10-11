@@ -11,6 +11,7 @@
  * RLS_REQUIRE_PG=1 la ausencia es un fallo (úsalo en CI).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Client } from "pg";
 import { describeEnvironment, pgAvailable, startEphemeralPostgres, type EphemeralPostgres } from "../harness/pg";
@@ -20,6 +21,7 @@ const ROOT = resolve(__dirname, "../..");
 const STUB = resolve(ROOT, "tests/harness/supabase-stub.sql");
 const FIXTURE = resolve(ROOT, "tests/harness/fixture.sql");
 const BASELINE = resolve(ROOT, "supabase/migrations/000001_baseline.sql");
+const VARIANT_000002 = resolve(ROOT, "supabase/variants/shared-appcc/000002_relevo_tables.sql");
 
 const ORG_A = "00000000-0000-0000-0000-00000000000a";
 const ORG_B = "00000000-0000-0000-0000-00000000000b";
@@ -84,6 +86,19 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
         [`public.${table}`],
       );
       expect(r.rows[0]?.relrowsecurity).toBe(true);
+    });
+
+    it("la variante 000002 NO es secuencial: tras el baseline falla con duplicate_table (42P07)", async () => {
+      // Base de datos aparte para no tocar la que usan el resto de tests.
+      await db.query("create database variant_check");
+      const other = await pg.connect({ database: "variant_check" });
+      try {
+        await other.query(readFileSync(STUB, "utf8"));
+        await other.query(readFileSync(BASELINE, "utf8"));
+        await expect(other.query(readFileSync(VARIANT_000002, "utf8"))).rejects.toMatchObject({ code: "42P07" });
+      } finally {
+        await other.end();
+      }
     });
 
     it("el bucket privado ticket-photos queda declarado con límite de 10 MB", async () => {
