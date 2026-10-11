@@ -9,7 +9,7 @@ describe("isPublicPath", () => {
   });
 
   it("protege todo lo demás, incluidas variantes que empiezan igual que una ruta pública", () => {
-    for (const p of ["/", "/dashboard", "/handover/new", "/tickets/new", "/loginx", "/login-admin", "/authx", "/manifest.json.bak", "/sw.js.map"]) {
+    for (const p of ["/", "/dashboard", "/handover/new", "/tickets/new", "/loginx", "/login-admin", "/authx", "/manifest.json.bak", "/sw.js.map", "/icon-admin", "/icon-report", "/icon-private.json", "/icon-192.png.map"]) {
       expect(isPublicPath(p), p).toBe(false);
     }
   });

@@ -3,7 +3,7 @@
  * Sin dependencias de Next ni de Supabase para que sean triviales de testear.
  */
 
-/** Rutas accesibles sin sesión. Coincidencia exacta salvo los iconos de la PWA. */
+/** Rutas accesibles sin sesión. Coincidencia exacta; los iconos de la PWA por patrón cerrado. */
 const PUBLIC_EXACT = new Set([
   "/login",
   "/auth/callback",
@@ -12,11 +12,12 @@ const PUBLIC_EXACT = new Set([
   "/sw.js",
 ]);
 
-const PUBLIC_PREFIXES = ["/icon-"];
+/** Iconos declarados en public/manifest.json (/icon-192.png, /icon-512.png). Patrón cerrado: nada más bajo /icon-. */
+const PUBLIC_PATTERNS = [/^\/icon-\d+(x\d+)?\.png$/];
 
 export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;
-  return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+  return PUBLIC_PATTERNS.some((re) => re.test(pathname));
 }
 
 /** Destinos que nunca deben usarse como `next` tras autenticarse (bucles). */
