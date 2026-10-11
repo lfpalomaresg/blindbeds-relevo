@@ -132,6 +132,13 @@ export async function startEphemeralPostgres(): Promise<EphemeralPostgres> {
     );
   } catch (err) {
     const log = existsSync(logFile) ? readFileSync(logFile, "utf8") : "";
+    // `pg_ctl -w start` puede fallar (timeout) con el postmaster ya arrancado:
+    // pararlo antes de borrar su directorio para no dejar un proceso huérfano.
+    try {
+      runner.run(join(binDir, "pg_ctl"), ["-D", dataDir, "-m", "immediate", "-w", "stop"], quiet);
+    } catch {
+      /* no llegó a arrancar */
+    }
     rmSync(socketDir, { recursive: true, force: true });
     throw new Error(`Could not start ephemeral Postgres: ${(err as Error).message}\n${log}`);
   }
