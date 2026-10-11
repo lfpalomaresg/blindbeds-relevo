@@ -4,6 +4,21 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-10-11 — Revisión del PR #1 (Mac, careo nivel 1 con Codex)
+
+**Hecho** · Suite 272 → 276 (RLS 78 → 80, harness +2) sobre PostgreSQL 17.11
+real; lint y typecheck en 0; ley del rojo verificada en 5 tests. Fixes: `/icon-`
+pasa a patrón cerrado `/icon-<n>.png` (antes cualquier `/icon-*` era público);
+el harness intenta `pg_ctl stop` si `pg_ctl start` falla a medias. Tests nuevos:
+staff/supervisor no borran activos y admin sí; un parte no se mueve de org.
+**Pendiente** · Runbook §«Pendiente conocido»: policies de `storage.objects`,
+FK compuestas anti-cruce de orgs, escrituras no atómicas (heredado de `main`).
+`next build` sin env de Supabase falla en `/dashboard` también en `main`.
+**Decidido** · Los hallazgos heredados no se arreglan en este PR: van al runbook
+con remedio propuesto para que el operador decida antes de activar Supabase.
+
+---
+
 ## 2026-10-11 — Harness Postgres + RLS, hardening, cobertura
 
 Rama: `claude/rls-postgres-harness-m1ly4y` → PR contra `main`.

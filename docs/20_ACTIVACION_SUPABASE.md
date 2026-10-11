@@ -14,7 +14,9 @@ npm run test:rls    # solo la matriz RLS; falla si no hay binarios de Postgres
 ```
 
 `npm run test:rls` necesita `initdb`/`pg_ctl` instalados (paquete `postgresql`
-en Debian/Ubuntu, `postgresql@16` en Homebrew). No usa Docker ni red: arranca un
+en Debian/Ubuntu, `postgresql@17` o cualquier `postgresql@<v>` en Homebrew: el
+harness autodetecta `/opt/homebrew/opt/postgresql@<v>/bin` aunque no esté en el
+`PATH`). No usa Docker ni red: arranca un
 cluster en un directorio temporal, aplica `supabase/migrations/000001_baseline.sql`
 sobre un stub de `auth`/`storage` y comprueba las policies para
 `staff / supervisor / admin`, anon, usuarios sin membership y organizaciones
@@ -103,3 +105,24 @@ redirige a `/login?error=config` si faltan.
 
 Añadir una migración nueva = añadir `supabase/migrations/00000N_*.sql` y
 aplicarla en el `beforeAll` de `tests/db/rls.test.ts` detrás del baseline.
+
+## Pendiente conocido antes de dar por activo (careo 2026-10-11)
+
+Heredado de `main`, fuera del alcance del PR #1; sin test que lo cubra todavía.
+Decidir y aplicar ANTES de dar Relevo por operativo:
+
+1. **Fotos: no hay policies sobre `storage.objects`.** El baseline solo crea la
+   fila del bucket `ticket-photos`. Sin una policy `insert`/`select` para
+   `authenticated` limitada a `bucket_id = 'ticket-photos'` y a la carpeta
+   `<org_id>/` del usuario, `TicketForm` fallará al subir la foto en un Supabase
+   real. El harness no modela `storage.objects`, así que el verde no lo prueba.
+2. **Cruce entre organizaciones por FK simple.** `handover_items.handover_id` y
+   `maintenance_tickets.asset_id` solo exigen que la fila referenciada exista,
+   no que sea de la misma `org_id`. Un miembro de A podría enlazar un item a un
+   relevo de B o un parte a un activo de B (necesita adivinar el UUID; no hay
+   lectura cruzada). Remedio: FK compuesta `(handover_id, org_id)` /
+   `(asset_id, org_id)` con `unique (id, org_id)` en la tabla padre.
+3. **Escrituras no atómicas en el cliente.** `HandoverForm` inserta el relevo y
+   después los items; `TicketForm` sube la foto y después el parte. Si falla el
+   segundo paso queda un relevo vacío o una foto huérfana. Remedio: RPC
+   transaccional en Postgres o borrado compensatorio.
