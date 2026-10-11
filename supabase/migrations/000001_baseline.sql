@@ -71,6 +71,10 @@ create index shift_handovers_org_idx on public.shift_handovers(org_id, created_a
 create table public.handover_items (
   id uuid primary key default gen_random_uuid(),
   handover_id uuid not null references public.shift_handovers(id) on delete cascade,
+  -- org_id desnormalizado desde shift_handovers para que RLS y el índice de
+  -- pendientes no necesiten un join. Debe declararse aquí: un `alter table add
+  -- column` posterior al índice falla con "column org_id does not exist".
+  org_id uuid not null references public.organizations(id),
   block text not null check (block in ('pendientes', 'vips', 'incidencias', 'avisos')),
   content text not null,
   resolved boolean not null default false,
@@ -80,9 +84,6 @@ create table public.handover_items (
 );
 
 create index handover_items_pending_idx on public.handover_items(org_id, resolved, created_at desc);
-
--- FK para index de pending
-alter table public.handover_items add column org_id uuid not null references public.organizations(id);
 
 -- ─── Módulo 2: Partes de avería (FR-006) ───
 
