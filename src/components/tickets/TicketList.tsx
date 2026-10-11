@@ -67,7 +67,7 @@ export function TicketList({ orgId }: TicketListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div role="group" aria-label="Filtrar por estado" className="flex gap-2">
         {[{ value: "todas", label: "Todas" }, ...TICKET_STATUSES].map((s) => (
           <button
             key={s.value}
@@ -90,7 +90,7 @@ export function TicketList({ orgId }: TicketListProps) {
       )}
 
       {tickets.map((ticket) => (
-        <div key={ticket.id} className="border border-gray-200 rounded-lg p-4">
+        <article key={ticket.id} aria-label={ticket.title} className="border border-gray-200 rounded-lg p-4">
           <div className="flex items-start justify-between mb-2">
             <div>
               <h3 className="font-medium text-gray-900">{ticket.title}</h3>
@@ -133,7 +133,7 @@ export function TicketList({ orgId }: TicketListProps) {
               )}
             </div>
           )}
-        </div>
+        </article>
       ))}
     </div>
   );

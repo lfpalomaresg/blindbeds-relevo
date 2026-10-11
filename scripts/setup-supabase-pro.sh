@@ -19,7 +19,12 @@
 
 set -euo pipefail
 
-# ── 0. Cargar variables de entorno ──────────────────────────────────────────
+# ── 0. Prerrequisitos locales ────────────────────────────────────────────────
+
+if ! command -v psql >/dev/null 2>&1; then
+  echo "❌  psql no encontrado. Instala el cliente de PostgreSQL (postgresql-client) y vuelve a ejecutar."
+  exit 1
+fi
 
 if [ ! -f .env.local ]; then
   echo "❌  .env.local no encontrado. Copia .env.local.example y rellena las claves."

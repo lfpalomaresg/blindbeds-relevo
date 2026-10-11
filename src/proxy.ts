@@ -1,10 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { hasSupabaseEnv, isPublicPath } from "@/lib/auth-paths";
 
-export async function middleware(request: NextRequest) {
-  const publicPaths = ["/login", "/auth/callback", "/auth/confirm", "/manifest.json", "/icon-"];
-  if (publicPaths.some((p) => request.nextUrl.pathname.startsWith(p))) {
+/**
+ * Proxy de autenticación (Next 16: sustituye a `middleware.ts`).
+ * Fallo cerrado: solo pasan las rutas públicas o las peticiones con usuario
+ * verificado por Supabase. Si falta configuración, también se corta.
+ */
+export async function proxy(request: NextRequest) {
+  if (isPublicPath(request.nextUrl.pathname)) {
     return NextResponse.next();
+  }
+
+  if (!hasSupabaseEnv()) {
+    return NextResponse.redirect(new URL("/login?error=config", request.url));
   }
 
   let response = NextResponse.next({ request });
@@ -28,7 +37,13 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  let user: { id: string } | null = null;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    user = error ? null : data.user;
+  } catch {
+    user = null;
+  }
 
   if (!user) {
     return NextResponse.redirect(new URL("/login", request.url));

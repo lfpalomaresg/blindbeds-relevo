@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { LIMITS, validateHandoverInput } from "@/lib/validation";
 import type { HandoverItem, HandoverBlock, Department, ShiftType } from "@/types";
 import { DEPARTMENTS, SHIFT_TYPES, HANDOVER_BLOCKS } from "@/types";
 
@@ -9,16 +10,18 @@ interface HandoverFormProps {
   orgId: string;
 }
 
+const EMPTY_ITEMS: Record<HandoverBlock, string> = {
+  pendientes: "",
+  vips: "",
+  incidencias: "",
+  avisos: "",
+};
+
 export function HandoverForm({ orgId }: HandoverFormProps) {
   const supabase = useMemo(() => createBrowserClient(), []);
   const [department, setDepartment] = useState<Department>("recepcion");
   const [shiftType, setShiftType] = useState<ShiftType>("manana");
-  const [items, setItems] = useState<Record<HandoverBlock, string>>({
-    pendientes: "",
-    vips: "",
-    incidencias: "",
-    avisos: "",
-  });
+  const [items, setItems] = useState<Record<HandoverBlock, string>>(EMPTY_ITEMS);
   const [pendingItems, setPendingItems] = useState<HandoverItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -46,6 +49,14 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    // Validar antes de tocar la red: sin bloques, catálogo o límites incorrectos no hay insert.
+    const validated = validateHandoverInput({ department, shiftType, items });
+    if (!validated.ok) {
+      setError(validated.error);
+      return;
+    }
+
     setSaving(true);
 
     const { data: userData } = await supabase.auth.getUser();
@@ -59,8 +70,8 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
       .from("shift_handovers")
       .insert({
         org_id: orgId,
-        department,
-        shift_type: shiftType,
+        department: validated.value.department,
+        shift_type: validated.value.shiftType,
         created_by: userData.user.id,
       })
       .select("id")
@@ -72,22 +83,18 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
       return;
     }
 
-    const itemRows = HANDOVER_BLOCKS
-      .filter((b) => items[b.value].trim())
-      .map((b) => ({
-        handover_id: handover.id,
-        org_id: orgId,
-        block: b.value,
-        content: items[b.value].trim(),
-      }));
+    const itemRows = validated.value.items.map((item) => ({
+      handover_id: handover.id as string,
+      org_id: orgId,
+      block: item.block,
+      content: item.content,
+    }));
 
-    if (itemRows.length > 0) {
-      const { error: iError } = await supabase.from("handover_items").insert(itemRows);
-      if (iError) {
-        setError(iError.message);
-        setSaving(false);
-        return;
-      }
+    const { error: iError } = await supabase.from("handover_items").insert(itemRows);
+    if (iError) {
+      setError(iError.message);
+      setSaving(false);
+      return;
     }
 
     setSaving(false);
@@ -109,7 +116,7 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
         <button
           onClick={() => {
             setDone(false);
-            setItems({ pendientes: "", vips: "", incidencias: "", avisos: "" });
+            setItems(EMPTY_ITEMS);
           }}
           className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
         >
@@ -123,8 +130,9 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Departamento</label>
+          <label htmlFor="handover-department" className="block text-sm font-medium text-gray-700 mb-1">Departamento</label>
           <select
+            id="handover-department"
             value={department}
             onChange={(e) => setDepartment(e.target.value as Department)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -135,8 +143,9 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Turno</label>
+          <label htmlFor="handover-shift" className="block text-sm font-medium text-gray-700 mb-1">Turno</label>
           <select
+            id="handover-shift"
             value={shiftType}
             onChange={(e) => setShiftType(e.target.value as ShiftType)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -168,21 +177,23 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
 
       {HANDOVER_BLOCKS.map((block) => (
         <div key={block.value}>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor={`handover-block-${block.value}`} className="block text-sm font-medium text-gray-700 mb-1">
             {block.label}
             <span className="text-gray-400 font-normal ml-1">— {block.description}</span>
           </label>
           <textarea
+            id={`handover-block-${block.value}`}
             value={items[block.value]}
             onChange={(e) => updateBlock(block.value, e.target.value)}
             rows={3}
+            maxLength={LIMITS.handoverContent}
             placeholder={`Escribe aquí ${block.description.toLowerCase()}...`}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
           />
         </div>
       ))}
 
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
 
       <button
         type="submit"
