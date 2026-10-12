@@ -11,9 +11,9 @@
 #   ./scripts/setup-supabase-pro.sh
 #
 # Lo que hace:
-#   - Aplica las migraciones (baseline.sql)
+#   - Aplica todas las migraciones de supabase/migrations en orden
 #   - Carga el seed de demo
-#   - Verifica que las tablas y policies existen
+#   - Verifica tablas, RLS, bucket y policies de storage
 #   - Imprime las env vars necesarias para Vercel
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -45,18 +45,30 @@ DB_URL="postgresql://postgres:${SUPABASE_DB_PASSWORD:?Falta SUPABASE_DB_PASSWORD
 
 echo "🔗  Conectando a: ${DB_HOST}"
 
-# ── 1. Aplicar migración baseline ───────────────────────────────────────────
+# ── 1. Aplicar migraciones (todas las de supabase/migrations, en orden) ─────
+# Cada fichero en su propia transacción y parando en el primer error: sin
+# ON_ERROR_STOP psql devuelve 0 aunque el SQL falle a medias.
 
-echo ""
-echo "📋  Aplicando 000001_baseline.sql …"
-psql "$DB_URL" -f supabase/migrations/000001_baseline.sql -q
-echo "✅  Migración baseline aplicada"
+shopt -s nullglob
+MIGRATIONS=(supabase/migrations/*.sql)
+shopt -u nullglob
+if [ "${#MIGRATIONS[@]}" -eq 0 ]; then
+  echo "❌  No hay migraciones en supabase/migrations"
+  exit 1
+fi
+
+for MIGRATION in "${MIGRATIONS[@]}"; do
+  echo ""
+  echo "📋  Aplicando $(basename "$MIGRATION") …"
+  psql "$DB_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$MIGRATION" -q
+  echo "✅  $(basename "$MIGRATION") aplicada"
+done
 
 # ── 2. Cargar seed de demo ───────────────────────────────────────────────────
 
 echo ""
 echo "🌱  Cargando seed de demo …"
-psql "$DB_URL" -f scripts/seed-demo.sql -q
+psql "$DB_URL" -v ON_ERROR_STOP=1 --single-transaction -f scripts/seed-demo.sql -q
 echo "✅  Seed de demo cargado"
 
 # ── 3. Verificar tablas ──────────────────────────────────────────────────────
@@ -100,7 +112,20 @@ else
   exit 1
 fi
 
-# ── 6. Imprimir env vars para Vercel ─────────────────────────────────────────
+# ── 6. Verificar policies de storage del bucket ─────────────────────────────
+# Sin ellas las fotos de los partes no suben (storage.objects tiene RLS activo).
+
+echo ""
+echo "🔐  Verificando policies de storage …"
+POLICIES=$(psql "$DB_URL" -t -c "select count(*) from pg_policies where schemaname='storage' and tablename='objects' and policyname like 'ticket_photos_%'" | tr -d ' ')
+if [ "$POLICIES" = "3" ]; then
+  echo "  ✅  3 policies de storage para ticket-photos (leer, subir, borrar)"
+else
+  echo "  ❌  Faltan policies de storage para ticket-photos (encontradas: ${POLICIES:-0}, esperadas: 3)"
+  exit 1
+fi
+
+# ── 7. Imprimir env vars para Vercel ─────────────────────────────────────────
 
 echo ""
 echo "════════════════════════════════════════════════════════════════"

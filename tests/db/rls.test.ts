@@ -1,8 +1,8 @@
 /**
  * Matriz RLS sobre un Postgres efímero real (sin Docker).
  *
- * Aplica tests/harness/supabase-stub.sql (auth/storage/roles mínimos) y la
- * migración supabase/migrations/000001_baseline.sql, carga un fixture
+ * Aplica los stubs de tests/harness (auth/storage/roles mínimos) y TODAS las
+ * migraciones de supabase/migrations en orden (tests/harness/db.ts), carga un fixture
  * sintético y comprueba las policies para staff / supervisor / admin, para
  * un usuario sin membership, para un miembro de una org suspendida y para anon,
  * en las 5 tablas de Relevo (+ organizations y memberships, que las sostienen).
@@ -14,12 +14,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Client } from "pg";
+import { bootstrap } from "../harness/db";
 import { gatePg, startEphemeralPostgres, type EphemeralPostgres } from "../harness/pg";
 import { ANON, RLS_VIOLATION, asUser, countAs, errorCodeAs, rowCountAs, runAs } from "../harness/rls";
 
 const ROOT = resolve(__dirname, "../..");
 const STUB = resolve(ROOT, "tests/harness/supabase-stub.sql");
-const FIXTURE = resolve(ROOT, "tests/harness/fixture.sql");
 const BASELINE = resolve(ROOT, "supabase/migrations/000001_baseline.sql");
 const VARIANT_000002 = resolve(ROOT, "supabase/variants/shared-appcc/000002_relevo_tables.sql");
 
@@ -49,17 +49,16 @@ const ALL_TABLES = ["organizations", "memberships", ...RELEVO_TABLES] as const;
 // En CI (o con RLS_REQUIRE_PG=1) lanza si no hay Postgres: el fichero falla, no se omite.
 const available = gatePg("rls.test");
 
-describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)", () => {
+describe.skipIf(!available)("RLS sobre Postgres efímero (todas las migraciones)", () => {
   let pg: EphemeralPostgres;
   let db: Client;
   let migrationError: unknown = null;
 
   beforeAll(async () => {
     pg = await startEphemeralPostgres();
-    await pg.applySqlFile(STUB);
     try {
-      await pg.applySqlFile(BASELINE);
-      await pg.applySqlFile(FIXTURE);
+      // Stubs + TODAS las migraciones de supabase/migrations en orden + fixture.
+      await bootstrap(pg);
     } catch (err) {
       migrationError = err;
     }
@@ -72,7 +71,7 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
   });
 
   describe("migración", () => {
-    it("000001_baseline.sql se aplica sin errores sobre un Postgres limpio", () => {
+    it("todas las migraciones de supabase/migrations se aplican en orden sin errores sobre un Postgres limpio", () => {
       expect(migrationError, String((migrationError as Error)?.message)).toBeNull();
     });
 
