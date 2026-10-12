@@ -47,6 +47,7 @@ case "$query" in
   *rowsecurity*) echo " t" ;;
   *storage.buckets*) echo " ticket-photos" ;;
   *to_regclass*) if [ -n "\${FAKE_PSQL_BASELINE_APPLIED:-}" ]; then echo " organizations"; else echo ""; fi ;;
+  *pg_policies*"schemaname='public'"*) echo " \${FAKE_PSQL_PUBLIC_POLICIES:-16}" ;;
   *pg_policies*) echo " \${FAKE_PSQL_STORAGE_POLICIES:-3}" ;;
   "") ;;
   *) echo "unexpected query: $query" >&2; exit 2 ;;
@@ -172,7 +173,7 @@ describe("scripts/setup-supabase-pro.sh", () => {
     expect(calls.some((c) => c.includes("storage.buckets") && c.includes("ticket-photos"))).toBe(true);
     expect(calls.some((c) => c.includes("pg_policies") && c.includes("ticket_photos_"))).toBe(true);
     // migraciones + seed + 7 tablas + 7 RLS + 1 bucket + 1 policies de storage
-    expect(calls).toHaveLength(MIGRATIONS.length + 1 + 7 + 7 + 1 + 1);
+    expect(calls).toHaveLength(MIGRATIONS.length + 1 + 7 + 7 + 1 + 1 + 1); // + policies RLS de public
     expect(psqlCalls()).toHaveLength(calls.length + 1);
 
     expect(r.out).toMatch(/Setup completo/);
@@ -202,6 +203,20 @@ describe("scripts/setup-supabase-pro.sh", () => {
     for (const m of MIGRATIONS.slice(1)) expect(files.some((c) => c.includes(m)), m).toBe(true);
     expect(r.out).toMatch(/000001_baseline\.sql ya aplicada/);
     expect(r.out).toMatch(/Setup completo/);
+  });
+
+  it("baseline a medias (existe organizations pero faltan policies de las tablas): sale con 1, no dice «completo»", () => {
+    writeFileSync(join(work, ".env.local"), ENV_OK);
+    const r = run({ env: { FAKE_PSQL_BASELINE_APPLIED: "1", FAKE_PSQL_PUBLIC_POLICIES: "9" } });
+    expect(r.status).toBe(1);
+    expect(r.out).toMatch(/policies RLS.*encontradas: 9, esperadas: 16/);
+    expect(r.out).not.toMatch(/Setup completo/);
+  });
+
+  it("el número de policies esperado coincide con las que declara el baseline", () => {
+    const baseline = readFileSync(join(ROOT, "supabase/migrations/000001_baseline.sql"), "utf8");
+    const declared = (baseline.match(/^create policy /gm) ?? []).length;
+    expect(readFileSync(SCRIPT, "utf8")).toContain(`EXPECTED_PUBLIC_POLICIES=${declared}`);
   });
 
   it("si faltan policies de storage para ticket-photos, sale con 1 y lo dice", () => {

@@ -109,6 +109,18 @@ for TABLE in "${TABLES[@]}"; do
   fi
 done
 
+# Policies de las 7 tablas: detecta un baseline aplicado a medias (tablas con
+# RLS activo pero sin policies = todo denegado) aunque el paso 1 lo haya saltado.
+EXPECTED_PUBLIC_POLICIES=16
+PUBLIC_POLICIES=$(psql "$DB_URL" -t -c "select count(*) from pg_policies where schemaname='public' and tablename in ('organizations','memberships','shift_handovers','handover_items','ticket_assets','maintenance_tickets','ticket_updates')" | tr -d ' ')
+if [ "$PUBLIC_POLICIES" = "$EXPECTED_PUBLIC_POLICIES" ]; then
+  echo "  ✅  $PUBLIC_POLICIES policies RLS en las tablas"
+else
+  echo "  ❌  Faltan o sobran policies RLS en las tablas (encontradas: ${PUBLIC_POLICIES:-0}, esperadas: $EXPECTED_PUBLIC_POLICIES)."
+  echo "      Posible baseline aplicado a medias: revisa el proyecto antes de continuar."
+  exit 1
+fi
+
 # ── 5. Verificar bucket de fotos ─────────────────────────────────────────────
 
 echo ""
