@@ -7,14 +7,14 @@
  * un usuario sin membership, para un miembro de una org suspendida y para anon,
  * en las 5 tablas de Relevo (+ organizations y memberships, que las sostienen).
  *
- * Si no hay binarios de Postgres el fichero se omite con aviso; con
- * RLS_REQUIRE_PG=1 la ausencia es un fallo (úsalo en CI).
+ * Si no hay binarios de Postgres el fichero se omite con aviso en local; en CI
+ * (`CI=true`) o con RLS_REQUIRE_PG=1 la ausencia es un FALLO (ver `gatePg`).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Client } from "pg";
-import { describeEnvironment, pgAvailable, startEphemeralPostgres, type EphemeralPostgres } from "../harness/pg";
+import { gatePg, startEphemeralPostgres, type EphemeralPostgres } from "../harness/pg";
 import { ANON, RLS_VIOLATION, asUser, countAs, errorCodeAs, rowCountAs, runAs } from "../harness/rls";
 
 const ROOT = resolve(__dirname, "../..");
@@ -46,12 +46,8 @@ const TICKET_B = "40000000-0000-0000-0000-00000000000b";
 const RELEVO_TABLES = ["shift_handovers", "handover_items", "ticket_assets", "maintenance_tickets", "ticket_updates"] as const;
 const ALL_TABLES = ["organizations", "memberships", ...RELEVO_TABLES] as const;
 
-const available = pgAvailable();
-if (!available) {
-  const msg = `[rls.test] PostgreSQL no disponible (${describeEnvironment()}); tests RLS omitidos.`;
-  if (process.env.RLS_REQUIRE_PG) throw new Error(msg);
-  console.warn(msg);
-}
+// En CI (o con RLS_REQUIRE_PG=1) lanza si no hay Postgres: el fichero falla, no se omite.
+const available = gatePg("rls.test");
 
 describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)", () => {
   let pg: EphemeralPostgres;

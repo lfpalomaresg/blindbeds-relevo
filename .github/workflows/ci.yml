@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, tests (RLS on real Postgres), build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # The RLS matrix must never be skipped here: without Postgres the db
+      # test files throw instead of skipping (see tests/harness/pg.ts gatePg).
+      RLS_REQUIRE_PG: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (lockfile)
+        run: npm ci
+
+      - name: Lint (no warnings allowed)
+        run: npm run lint -- --max-warnings=0
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Locate PostgreSQL binaries (initdb, pg_ctl)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          find_pg() {
+            pg_bin=""
+            for dir in /usr/lib/postgresql/*/bin; do
+              if [ -x "$dir/initdb" ] && [ -x "$dir/pg_ctl" ]; then pg_bin="$dir"; fi
+            done
+          }
+          find_pg
+          if [ -z "$pg_bin" ]; then
+            echo "PostgreSQL not preinstalled on this image; installing from apt"
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql
+            find_pg
+          fi
+          if [ -z "$pg_bin" ]; then
+            echo "::error::initdb/pg_ctl not found under /usr/lib/postgresql/*/bin"
+            exit 1
+          fi
+          # initdb refuses to run as root; the harness would need setpriv then.
+          if [ "$(id -u)" = "0" ]; then
+            echo "::error::CI must not run the test suite as root"
+            exit 1
+          fi
+          echo "$pg_bin" >> "$GITHUB_PATH"
+          "$pg_bin/initdb" --version
+
+      - name: Test (full suite, RLS matrix required)
+        run: npm test
+
+      - name: Build (placeholder public env, no real project)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+        run: npm run build
