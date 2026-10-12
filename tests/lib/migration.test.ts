@@ -23,6 +23,7 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
     expect(readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql")).sort()).toEqual([
       "000001_baseline.sql",
       "000003_storage_policies.sql",
+      "000004_org_scoped_fks.sql",
     ]);
   });
 });
