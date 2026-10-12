@@ -274,6 +274,30 @@ describe.skipIf(!available)("FK compuestas por organización (000004_org_scoped_
       }
     });
 
+    it("una constraint homónima pero incorrecta (deriva) no engaña a la migración: queda la FK canónica", async () => {
+      const other = await freshDatabase(pg, db, "fk_drift");
+      try {
+        await other.query(baseline());
+        await other.query(readFileSync(FIXTURE, "utf8"));
+        await other.query(`alter table public.handover_items add constraint handover_items_handover_org_fkey check (true)`);
+        await other.query(`alter table public.shift_handovers add constraint shift_handovers_id_org_id_key check (true)`);
+        await other.query(migration());
+        const r = await other.query(
+          `select conname, contype::text as contype from pg_constraint
+           where conname in ('handover_items_handover_org_fkey', 'shift_handovers_id_org_id_key') order by conname`,
+        );
+        expect(r.rows).toEqual([
+          { conname: "handover_items_handover_org_fkey", contype: "f" },
+          { conname: "shift_handovers_id_org_id_key", contype: "u" },
+        ]);
+        await expect(
+          other.query(`insert into public.handover_items (handover_id, org_id, block, content) values ($1, $2, 'avisos', 'cruce')`, [HANDOVER_B, ORG_A]),
+        ).rejects.toMatchObject({ code: FK_VIOLATION });
+      } finally {
+        await other.end();
+      }
+    });
+
     it("scripts/seed-demo.sql se carga tras todas las migraciones (lo que hace el script de setup) y es repetible", async () => {
       const other = await freshDatabase(pg, db, "fk_seed");
       try {

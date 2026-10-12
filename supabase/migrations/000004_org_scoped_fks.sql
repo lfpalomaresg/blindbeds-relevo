@@ -18,8 +18,11 @@
 -- ticket_updates had no org_id: it is added, backfilled from its ticket and
 -- kept in sync by a BEFORE INSERT trigger, so clients may keep omitting it.
 --
--- Idempotent: every step is guarded. Apply it in a single transaction (the
--- setup script does): if it aborts, nothing is left half-applied.
+-- Idempotent: constraints and the trigger are dropped and recreated with their
+-- canonical definition, so re-running converges to the same schema. It MUST run
+-- in a single transaction (the setup script and the Supabase CLI do): the
+-- constraints are briefly absent in between, and if it aborts nothing is left
+-- half-applied.
 --
 -- Existing data: rows that ALREADY cross organizations cannot be repaired
 -- automatically without guessing which side is right (and re-tagging them
@@ -52,33 +55,24 @@ end
 $$;
 
 -- ─── 1. Parents: (id, org_id) must be referenceable ───
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.shift_handovers'::regclass and conname = 'shift_handovers_id_org_id_key'
-  ) then
-    alter table public.shift_handovers
-      add constraint shift_handovers_id_org_id_key unique (id, org_id);
-  end if;
+-- Constraints are dropped and recreated with their canonical definition rather
+-- than skipped when the name already exists: a same-named constraint with a
+-- different definition (drift) must not be mistaken for the real one. The
+-- simple FKs are only dropped at the end, once the composite ones exist.
+alter table public.handover_items drop constraint if exists handover_items_handover_org_fkey;
+alter table public.maintenance_tickets drop constraint if exists maintenance_tickets_asset_org_fkey;
+alter table public.ticket_updates drop constraint if exists ticket_updates_ticket_org_fkey;
 
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.ticket_assets'::regclass and conname = 'ticket_assets_id_org_id_key'
-  ) then
-    alter table public.ticket_assets
-      add constraint ticket_assets_id_org_id_key unique (id, org_id);
-  end if;
+alter table public.shift_handovers drop constraint if exists shift_handovers_id_org_id_key;
+alter table public.ticket_assets drop constraint if exists ticket_assets_id_org_id_key;
+alter table public.maintenance_tickets drop constraint if exists maintenance_tickets_id_org_id_key;
 
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.maintenance_tickets'::regclass and conname = 'maintenance_tickets_id_org_id_key'
-  ) then
-    alter table public.maintenance_tickets
-      add constraint maintenance_tickets_id_org_id_key unique (id, org_id);
-  end if;
-end
-$$;
+alter table public.shift_handovers
+  add constraint shift_handovers_id_org_id_key unique (id, org_id);
+alter table public.ticket_assets
+  add constraint ticket_assets_id_org_id_key unique (id, org_id);
+alter table public.maintenance_tickets
+  add constraint maintenance_tickets_id_org_id_key unique (id, org_id);
 
 -- ─── 2. ticket_updates.org_id, derived from its ticket ───
 alter table public.ticket_updates
@@ -117,43 +111,24 @@ create trigger ticket_updates_set_org_id
   before insert on public.ticket_updates
   for each row execute function public.ticket_updates_set_org_id();
 
--- ─── 3. Children: composite FKs ───
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.handover_items'::regclass and conname = 'handover_items_handover_org_fkey'
-  ) then
-    alter table public.handover_items
-      add constraint handover_items_handover_org_fkey
-      foreign key (handover_id, org_id)
-      references public.shift_handovers (id, org_id)
-      on delete cascade;
-  end if;
+-- ─── 3. Children: composite FKs (dropped in step 1 if they already existed) ───
+alter table public.handover_items
+  add constraint handover_items_handover_org_fkey
+  foreign key (handover_id, org_id)
+  references public.shift_handovers (id, org_id)
+  on delete cascade;
 
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.maintenance_tickets'::regclass and conname = 'maintenance_tickets_asset_org_fkey'
-  ) then
-    -- MATCH SIMPLE (default): a ticket without asset (asset_id null) is not checked.
-    alter table public.maintenance_tickets
-      add constraint maintenance_tickets_asset_org_fkey
-      foreign key (asset_id, org_id)
-      references public.ticket_assets (id, org_id);
-  end if;
+-- MATCH SIMPLE (default): a ticket without asset (asset_id null) is not checked.
+alter table public.maintenance_tickets
+  add constraint maintenance_tickets_asset_org_fkey
+  foreign key (asset_id, org_id)
+  references public.ticket_assets (id, org_id);
 
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.ticket_updates'::regclass and conname = 'ticket_updates_ticket_org_fkey'
-  ) then
-    alter table public.ticket_updates
-      add constraint ticket_updates_ticket_org_fkey
-      foreign key (ticket_id, org_id)
-      references public.maintenance_tickets (id, org_id)
-      on delete cascade;
-  end if;
-end
-$$;
+alter table public.ticket_updates
+  add constraint ticket_updates_ticket_org_fkey
+  foreign key (ticket_id, org_id)
+  references public.maintenance_tickets (id, org_id)
+  on delete cascade;
 
 -- ─── 4. The simple FKs are now implied by the composite ones ───
 alter table public.handover_items drop constraint if exists handover_items_handover_id_fkey;

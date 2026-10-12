@@ -57,8 +57,17 @@ if [ "${#MIGRATIONS[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# El baseline no es repetible (create table sin "if not exists"). Si el proyecto
+# ya lo tiene, se salta; las migraciones posteriores son idempotentes y se
+# aplican siempre, así el script sirve también para poner al día un proyecto.
+BASELINE_APPLIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -c "select to_regclass('public.organizations')" | tr -d ' ')
+
 for MIGRATION in "${MIGRATIONS[@]}"; do
   echo ""
+  if [ "$(basename "$MIGRATION")" = "000001_baseline.sql" ] && [ -n "$BASELINE_APPLIED" ]; then
+    echo "⏭️   000001_baseline.sql ya aplicada (existe public.organizations): se salta"
+    continue
+  fi
   echo "📋  Aplicando $(basename "$MIGRATION") …"
   psql "$DB_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$MIGRATION" -q
   echo "✅  $(basename "$MIGRATION") aplicada"

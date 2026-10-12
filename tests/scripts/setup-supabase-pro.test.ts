@@ -46,6 +46,7 @@ case "$query" in
     if [ -n "\${FAKE_PSQL_MISSING_TABLE:-}" ] && [[ "$query" == *"table_name='\${FAKE_PSQL_MISSING_TABLE}'"* ]]; then echo " 0"; else echo " 1"; fi ;;
   *rowsecurity*) echo " t" ;;
   *storage.buckets*) echo " ticket-photos" ;;
+  *to_regclass*) if [ -n "\${FAKE_PSQL_BASELINE_APPLIED:-}" ]; then echo " organizations"; else echo ""; fi ;;
   *pg_policies*) echo " \${FAKE_PSQL_STORAGE_POLICIES:-3}" ;;
   "") ;;
   *) echo "unexpected query: $query" >&2; exit 2 ;;
@@ -150,6 +151,8 @@ describe("scripts/setup-supabase-pro.sh", () => {
     // Todas las migraciones de supabase/migrations, en orden, y después el seed.
     expect(MIGRATIONS.length).toBeGreaterThanOrEqual(2);
     expect(MIGRATIONS[0]).toBe("000001_baseline.sql");
+    expect(calls[0]).toContain("to_regclass('public.organizations')");
+    calls.shift(); // la comprobación «¿baseline ya aplicado?» va antes de las migraciones
     MIGRATIONS.forEach((file, i) => {
       expect(calls[i], `migración ${i + 1}`).toContain(`-f supabase/migrations/${file}`);
       // Cada fichero en su propia transacción y parando en el primer error.
@@ -170,6 +173,7 @@ describe("scripts/setup-supabase-pro.sh", () => {
     expect(calls.some((c) => c.includes("pg_policies") && c.includes("ticket_photos_"))).toBe(true);
     // migraciones + seed + 7 tablas + 7 RLS + 1 bucket + 1 policies de storage
     expect(calls).toHaveLength(MIGRATIONS.length + 1 + 7 + 7 + 1 + 1);
+    expect(psqlCalls()).toHaveLength(calls.length + 1);
 
     expect(r.out).toMatch(/Setup completo/);
     expect(r.out).toContain("NEXT_PUBLIC_SUPABASE_URL      = https://abcxyz.supabase.co");
@@ -189,6 +193,17 @@ describe("scripts/setup-supabase-pro.sh", () => {
     expect(r.out).toMatch(/handover_items.*NO ENCONTRADA/);
   });
 
+  it("re-ejecución sobre un proyecto con el baseline ya aplicado: salta 000001 y aplica las demás", () => {
+    writeFileSync(join(work, ".env.local"), ENV_OK);
+    const r = run({ env: { FAKE_PSQL_BASELINE_APPLIED: "1" } });
+    expect(r.status, r.out).toBe(0);
+    const files = psqlCalls().filter((c) => c.includes(" -f ") || c.includes("-f supabase") || c.includes("-f scripts"));
+    expect(files.some((c) => c.includes("000001_baseline.sql"))).toBe(false);
+    for (const m of MIGRATIONS.slice(1)) expect(files.some((c) => c.includes(m)), m).toBe(true);
+    expect(r.out).toMatch(/000001_baseline\.sql ya aplicada/);
+    expect(r.out).toMatch(/Setup completo/);
+  });
+
   it("si faltan policies de storage para ticket-photos, sale con 1 y lo dice", () => {
     writeFileSync(join(work, ".env.local"), ENV_OK);
     const r = run({ env: { FAKE_PSQL_STORAGE_POLICIES: "0" } });
@@ -204,7 +219,7 @@ describe("scripts/setup-supabase-pro.sh", () => {
     const r = run();
     expect(r.status).not.toBe(0);
     const calls = psqlCalls();
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3); // comprobación de baseline + 000001 + la que falla
     expect(r.out).not.toMatch(/Setup completo/);
   });
 
