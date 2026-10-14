@@ -93,3 +93,22 @@ Suite después: 272 tests / 17 ficheros, lint 0, typecheck 0, `next build` OK.
 - No se añadió `check` a `ticket_updates.status_to` ni policies de `update` a
   `shift_handovers` (leer/marcar como leído): cambios de esquema fuera del
   encargo; documentados en el PR.
+
+## 2026-10-14 — Parches de dependencias y CI Linux (HP)
+
+### Hecho
+- Rama fix/dependency-security-20261014: Next y eslint-config-next 16.3.8, sharp 0.35.5, DOMPurify 3.4.17 y source-map-js 1.2.2. Sin cambios de lógica de aplicación, auth ni RLS.
+- Rojo: npm audit previo exit 1 (9 paquetes: 1 crítico, 7 altos, 1 bajo); GitHub lista 11 avisos sobre cuatro paquetes runtime. Verde: npm audit --omit=dev exit 0, sin vulnerabilidades de ejecución.
+- npm ci, typecheck y lint pasan. Build pasa con URL/anon key ficticias de Supabase, sin proyecto real.
+- Windows: 185 tests pasan; 11 fallan por montaje POSIX (sh ausente y binarios shell falsos); 80 RLS omitidos por falta de PostgreSQL. No se presentan como suite verde.
+- Añadido CI Linux, idéntico al workflow del PR #2: Ubuntu, Node 22, PostgreSQL efímero obligatorio, lint, typecheck, suite completa y build sin secretos. No incorpora los cambios de esquema del PR #2.
+- Revisión independiente Codex nivel 1: APTO estático para rama/PR, condicionado a CI verde; manifest/lock alineados, integridades de npm y rangos compatibles.
+
+### Pendiente
+- Ejecutar CI del PR antes de fusionar; los avisos de GitHub no se cierran hasta que el arreglo llegue a main.
+- npm audit completo conserva cinco avisos altos de desarrollo en la cadena eslint-config-next → fast-glob → micromatch → braces. El origen es braces <=3.0.3, última versión publicada 3.0.3; no hay parche compatible disponible a fecha de revisión. No usar npm audit fix --force (propone bajar eslint-config-next a 14).
+- El PR #2 de activación sigue independiente. No se ha desplegado ni creado base de datos.
+
+### Decidido
+- Aplicar versiones de parche mínimas para las 11 alertas runtime, sin saltar a Next 16.4 ni actualizar dependencias ajenas.
+- La auditoría es el reproductor rojo/verde de dependencias; la regresión funcional se verifica en Linux y PostgreSQL real.
