@@ -28,8 +28,10 @@ mantenimiento.
    a la vista del turno siguiente hasta que alguien lo marca como resuelto. Queda
    registrado quién lo cerró y cuándo.
 2. **Averías claras desde el primer aviso.** Un parte con título, descripción,
-   prioridad (crítica, alta, normal, baja) y foto hecha con el móvil. Si el equipo o la
-   habitación tienen un QR, se escanea y el parte queda asociado a ese activo.
+   prioridad (crítica, alta, normal, baja). Si el equipo o la habitación tienen un QR,
+   se escanea y el parte queda asociado a ese activo. **Próximamente:** adjuntar una
+   foto hecha con el móvil [VERIFICAR: solo se puede ofrecer cuando el almacenamiento
+   de fotos esté configurado; ver «Trazabilidad»].
 3. **Una sola pantalla para saber cómo está el hotel.** El panel muestra los pendientes
    sin resolver y los partes de avería abiertos o en curso; mantenimiento los pasa a
    «en curso» y a «cerrado» desde el propio móvil.
@@ -40,7 +42,7 @@ mantenimiento.
    pantalla de inicio del móvil como una app, sin pasar por la tienda de aplicaciones
    [VERIFICAR en iPhone y Android].
 2. **Al acabar el turno, rellenas el relevo** (departamento, turno y los cuatro
-   apartados; basta con uno). Si ves una avería, abres un parte, haces la foto y eliges
+   apartados; basta con uno). Si ves una avería, abres un parte, la describes y eliges
    la prioridad.
 3. **El siguiente turno lo ve al entrar**: pendientes abiertos y partes activos en el
    panel. Lo resuelto se cierra y deja rastro.
@@ -51,7 +53,7 @@ mantenimiento.
 |---|---|---|
 | Libreta y WhatsApp | Cero formación, pero los pendientes se pierden entre mensajes y no hay rastro de quién cerró qué | Igual de sencillo, pero cada pendiente y cada avería tiene estado, fecha y responsable del cierre |
 | Suites de operaciones hoteleras | Muy completas (housekeeping, inventario, mensajería con huésped…), normalmente con demo obligatoria y precio a medida | Solo relevo y averías: se aprende en una mañana [VERIFICAR con piloto] |
-| Programas de mantenimiento genéricos (CMMS) | Pensados para técnicos y órdenes de trabajo; el relevo de turno es un extra; a menudo se cobra por usuario | El relevo de turno es el centro y de ahí salen las averías |
+| Programas de mantenimiento genéricos (CMMS) | Pensados para técnicos y órdenes de trabajo; el relevo de turno es un extra; a menudo se cobra por usuario | Relevo de turno y partes de avería en la misma app, pensados para recepción, pisos y mantenimiento a la vez |
 | Plataformas de experiencia del huésped con cuaderno de consignas | El cuaderno viene dentro de un paquete más grande | Se contrata solo lo que necesitas |
 
 Hecho pensando en hoteles españoles: pantallas, departamentos (Recepción, Pisos,
@@ -62,8 +64,8 @@ F&B / Cocina, Mantenimiento) y turnos en español desde el primer día.
 - **«Mi equipo ya se apaña con WhatsApp.»** — Relevo no quita el WhatsApp para hablar;
   quita que los pendientes y las averías vivan ahí. La diferencia se ve el día que
   alguien pregunta «¿quién arregló esto y cuándo?».
-- **«Mi personal no es muy tecnológico.»** — Son cuatro casillas de texto y un botón de
-  foto. Para entrar no hay contraseña; eso sí, **cada persona necesita un email** para
+- **«Mi personal no es muy tecnológico.»** — Son cuatro casillas de texto y un par de
+  botones. Para entrar no hay contraseña; eso sí, **cada persona necesita un email** para
   recibir su enlace de acceso.
 - **«¿Tengo que conectarlo a mi PMS?»** — No. Funciona aparte del PMS; hoy no hay
   integración con ninguno.
@@ -71,14 +73,14 @@ F&B / Cocina, Mantenimiento) y turnos en español desde el primer día.
   mantenimiento ve los partes en su panel. Los avisos automáticos están
   **próximamente** [VERIFICAR fecha o quitar].
 - **«¿Dónde están mis datos?»** — Cada hotel solo ve lo suyo (separación por
-  organización probada con tests automáticos) y las fotos se guardan en un
-  almacenamiento privado. Ubicación de los servidores en la UE y contrato de encargado
+  organización probada con tests automáticos). Ubicación de los servidores en la UE y contrato de encargado
   de tratamiento (RGPD): [VERIFICAR].
 - **«¿Cuánto cuesta? ¿Hay permanencia?»** — [PRECIO: decisión del operador].
   Permanencia, usuarios incluidos y prueba gratuita: [VERIFICAR].
-- **«¿Cuánto se tarda en empezar?»** — Damos de alta tu hotel y a tu equipo nosotros;
-  tú solo pegas los QR en los equipos que quieras controlar [VERIFICAR plazo y quién
-  genera e imprime los QR].
+- **«¿Cuánto se tarda en empezar?»** — Damos de alta tu hotel y a tu equipo nosotros.
+  Para asociar partes a equipos o habitaciones con QR, el alta de esos equipos y la
+  preparación de los QR se acuerdan en la puesta en marcha [VERIFICAR plazo y quién
+  genera e imprime los QR: hoy no hay pantalla para ello].
 
 ### Precio
 
@@ -106,7 +108,9 @@ hotel. **Reserva tu demo:** [VERIFICAR contacto: email / teléfono / enlace de a
 | Estados abierto → en curso → cerrado, con registro | ✅ Existe (se guarda en `ticket_updates`; no hay pantalla para ver ese historial) | `TicketList.tsx` |
 | Entrada con enlace por email, sin contraseña | ✅ Existe | `src/components/auth/LoginForm.tsx` |
 | Se instala como app (PWA) | ⚠️ Manifest y service worker existen, pero **faltan los iconos** `icon-192.png` / `icon-512.png` en `public/` | `public/manifest.json`, `public/sw.js` |
-| Separación por hotel y fotos privadas | ✅ RLS probado (`tests/db/rls.test.ts`); bucket privado por `org_id` | README §Seguridad |
+| Separación por hotel (tablas) | ✅ RLS probado (`tests/db/rls.test.ts`) | README §Seguridad |
+| Fotos privadas por hotel | ⚠️ Retirado del texto comercial. El bucket `ticket-photos` existe, pero sin policies en `storage.objects` no hay aislamiento por `org_id` demostrado (y la subida fallaría); el harness no modela Storage, así que el RLS en verde no lo prueba | `supabase/migrations/000001_baseline.sql`, `docs/20_ACTIVACION_SUPABASE.md` §«Pendiente conocido» 1 |
+| Relevo y partes en la misma app | ✅ Existe como dos formularios independientes. ⚠️ **No** hay forma de crear o vincular un parte desde un relevo (`maintenance_tickets` no tiene referencia a `handovers`) | `src/components/handover/`, `src/components/tickets/`, `supabase/migrations/000001_baseline.sql` |
 | Alta de hotel y usuarios «la hacemos nosotros» | ✅ Coherente: no hay UI de alta, se hace por SQL (runbook §4) | `docs/20_ACTIVACION_SUPABASE.md` |
 
 ### Deliberadamente fuera del one-pager (no existe hoy)
@@ -126,5 +130,11 @@ necesita red) · integración con PMS · varios idiomas · marcar un relevo como
   texto (encargo de código aparte).
 - El README dice que la foto es «obligatoria»; el código la deja opcional. Este
   one-pager no dice ni una cosa ni la otra.
+- **Foto en el parte — decisión del operador.** Hoy el texto comercial la presenta como
+  «Próximamente». Opciones: (a) dejarla así hasta aplicar y probar las policies de
+  `storage.objects`; (b) aplicar antes las policies (encargo de código aparte) y
+  volver a prometer la foto y el almacenamiento privado; (c) quitar toda mención a la
+  foto. Recomendación: **(a)** ahora y pasar a (b) cuando haya prueba en un Supabase
+  real.
 - Comparativa: hecha por categorías, sin nombres de proveedores. Datos de origen en la
   investigación de competencia del 15/10 (fuentes públicas, sin contactar con nadie).
