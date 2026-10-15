@@ -54,8 +54,37 @@ describe("PendingItems", () => {
     await waitFor(() => expect(screen.queryByText(/Revisar minibar 101/)).toBeNull());
     const [update] = fake.callsTo("handover_items", "update");
     expect(update.payload).toMatchObject({ resolved: true, resolved_by: "user-sup", resolved_at: expect.any(String) });
-    expect(update.filters).toEqual([["id", "i1"]]);
+    expect(update.filters).toEqual([["id", "i1"], ["resolved", false]]);
     expect(screen.getByText(/Fuga en 204/)).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("si la base de datos rechaza la resolución, el pendiente sigue visible y se avisa", async () => {
+    setup({ user: { id: "user-sup" }, updateErrors: { handover_items: { message: "permission denied" } } });
+    await screen.findByText(/Revisar minibar 101/);
+    fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert").textContent).toMatch(/no se pudo resolver/i);
+    expect(screen.getByText(/Revisar minibar 101/)).toBeTruthy();
+  });
+
+  it("no vuelve a firmar un pendiente que otra persona ya resolvió", async () => {
+    const fake = setup({ user: { id: "user-sup" } });
+    await screen.findByText(/Revisar minibar 101/);
+    fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
+    await waitFor(() => expect(fake.callsTo("handover_items", "update")).toHaveLength(1));
+    const [update] = fake.callsTo("handover_items", "update");
+    expect(update.filters).toEqual([["id", "i1"], ["resolved", false]]);
+  });
+
+  it("si ya estaba resuelto por otra persona, lo quita de la lista y lo indica", async () => {
+    const fake = setup({ user: { id: "user-sup" } });
+    await screen.findByText(/Revisar minibar 101/);
+    fake.options.tables!.handover_items = ITEMS.map((i) => (i.id === "i1" ? { ...i, resolved: true } : i));
+    fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
+    await screen.findByRole("status");
+    expect(screen.getByRole("status").textContent).toMatch(/ya estaba resuelto/i);
+    expect(screen.queryByText(/Revisar minibar 101/)).toBeNull();
   });
 
   it("sin sesión no intenta resolver nada", async () => {

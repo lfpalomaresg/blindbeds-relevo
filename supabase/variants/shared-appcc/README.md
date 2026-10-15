@@ -26,6 +26,10 @@ APPCC/Audit en vez de en un proyecto propio. En ese caso:
    `staff < supervisor < admin` (la del baseline de Relevo fue corregida en este
    repo; la de APPCC puede arrastrar el mismo fallo).
 3. Aplicar este fichero con `psql -f`.
+4. Aplicar después `supabase/migrations/000002_change_ticket_status.sql`: la app
+   cambia el estado de los partes con esa función (solo depende de
+   `maintenance_tickets`, `ticket_updates` y `auth.uid()`, que existen en esta
+   variante).
 
 Decisión pendiente del operador: proyecto propio (baseline) o compartido
 (variante). Este repo está preparado para el primero.

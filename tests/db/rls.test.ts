@@ -2,7 +2,8 @@
  * Matriz RLS sobre un Postgres efímero real (sin Docker).
  *
  * Aplica tests/harness/supabase-stub.sql (auth/storage/roles mínimos) y la
- * migración supabase/migrations/000001_baseline.sql, carga un fixture
+ * migración supabase/migrations/000001_baseline.sql (+ las secuenciales
+ * posteriores, en orden), carga un fixture
  * sintético y comprueba las policies para staff / supervisor / admin, para
  * un usuario sin membership, para un miembro de una org suspendida y para anon,
  * en las 5 tablas de Relevo (+ organizations y memberships, que las sostienen).
@@ -11,7 +12,7 @@
  * RLS_REQUIRE_PG=1 la ausencia es un fallo (úsalo en CI).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Client } from "pg";
 import { describeEnvironment, pgAvailable, startEphemeralPostgres, type EphemeralPostgres } from "../harness/pg";
@@ -22,6 +23,12 @@ const STUB = resolve(ROOT, "tests/harness/supabase-stub.sql");
 const FIXTURE = resolve(ROOT, "tests/harness/fixture.sql");
 const BASELINE = resolve(ROOT, "supabase/migrations/000001_baseline.sql");
 const VARIANT_000002 = resolve(ROOT, "supabase/variants/shared-appcc/000002_relevo_tables.sql");
+/** Migraciones posteriores al baseline, en orden, como las aplicaría `db push`. */
+const MIGRATIONS_DIR = resolve(ROOT, "supabase/migrations");
+const SEQUENTIAL_MIGRATIONS = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith(".sql") && f !== "000001_baseline.sql")
+  .sort()
+  .map((f) => resolve(MIGRATIONS_DIR, f));
 
 const ORG_A = "00000000-0000-0000-0000-00000000000a";
 const ORG_B = "00000000-0000-0000-0000-00000000000b";
@@ -63,6 +70,7 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
     await pg.applySqlFile(STUB);
     try {
       await pg.applySqlFile(BASELINE);
+      for (const file of SEQUENTIAL_MIGRATIONS) await pg.applySqlFile(file);
       await pg.applySqlFile(FIXTURE);
     } catch (err) {
       migrationError = err;
@@ -345,6 +353,109 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
     it("el historial es inmutable: update y delete afectan 0 filas", async () => {
       expect(await rowCountAs(db, adminA, `update public.ticket_updates set comment = 'x' where ticket_id = $1`, [TICKET_A])).toBe(0);
       expect(await rowCountAs(db, adminA, `delete from public.ticket_updates where ticket_id = $1`, [TICKET_A])).toBe(0);
+    });
+  });
+
+  describe("change_ticket_status: cambio de estado + historial en una sola transacción", () => {
+    const call = `select public.change_ticket_status($1, $2, $3) as ok`;
+    /** SQLSTATE invalid_parameter_value: transición no permitida. */
+    const INVALID_TRANSITION = "22023";
+    const ticketState = `select status, closed_by, closed_at from public.maintenance_tickets where id = $1`;
+    const trace = `select status_from, status_to, created_by from public.ticket_updates where ticket_id = $1 and status_from is not null`;
+
+    it("un miembro cambia el estado de un parte de su org y queda una traza con origen y destino", async () => {
+      await runAs(db, staffA, async (q) => {
+        expect((await q(call, [TICKET_A, "abierto", "en_curso"])).rows[0].ok).toBe(true);
+        expect((await q(ticketState, [TICKET_A])).rows[0]).toMatchObject({ status: "en_curso", closed_by: null, closed_at: null });
+        expect((await q(trace, [TICKET_A])).rows).toEqual([
+          { status_from: "abierto", status_to: "en_curso", created_by: staffA.userId },
+        ]);
+      });
+    });
+
+    it("al cerrar firma quién y cuándo con el usuario de la sesión", async () => {
+      await runAs(db, staffA, async (q) => {
+        expect((await q(call, [TICKET_A, "abierto", "cerrado"])).rows[0].ok).toBe(true);
+        const row = (await q(ticketState, [TICKET_A])).rows[0];
+        expect(row.status).toBe("cerrado");
+        expect(row.closed_by).toBe(staffA.userId);
+        expect(row.closed_at).not.toBeNull();
+        expect((await q(trace, [TICKET_A])).rows).toHaveLength(1);
+      });
+    });
+
+    it("si el parte ya no está en el estado esperado devuelve false y no toca nada", async () => {
+      await runAs(db, staffA, async (q) => {
+        expect((await q(call, [TICKET_A, "en_curso", "cerrado"])).rows[0].ok).toBe(false);
+        expect((await q(ticketState, [TICKET_A])).rows[0].status).toBe("abierto");
+        expect((await q(trace, [TICKET_A])).rows).toHaveLength(0);
+      });
+    });
+
+    it("un parte de otra org ni cambia ni deja traza (RLS)", async () => {
+      expect(await runAs(db, staffB, async (q) => (await q(call, [TICKET_A, "abierto", "cerrado"])).rows[0].ok)).toBe(false);
+      await runAs(db, staffA, async (q) => {
+        expect((await q(ticketState, [TICKET_A])).rows[0].status).toBe("abierto");
+        expect((await q(trace, [TICKET_A])).rows).toHaveLength(0);
+      });
+    });
+
+    it("anon y usuarios sin sesión no pueden usarla", async () => {
+      expect(await errorCodeAs(db, ANON, call, [TICKET_A, "abierto", "cerrado"])).toBe(RLS_VIOLATION);
+    });
+
+    it("un estado fuera del catálogo se rechaza", async () => {
+      expect(await errorCodeAs(db, staffA, call, [TICKET_A, "abierto", "perdido"])).toBe(INVALID_TRANSITION);
+    });
+
+    // Solo las transiciones que ofrece la app: abierto→en_curso, abierto→cerrado, en_curso→cerrado.
+    it.each([
+      ["abierto", "abierto"],
+      ["en_curso", "en_curso"],
+      ["cerrado", "cerrado"],
+      ["cerrado", "abierto"],
+      ["cerrado", "en_curso"],
+      ["en_curso", "abierto"],
+    ])("rechaza la transición %s → %s aunque se llame a la función directamente", async (from, to) => {
+      expect(await errorCodeAs(db, staffA, call, [TICKET_A, from, to])).toBe(INVALID_TRANSITION);
+    });
+
+    it("una transición inválida no cambia el parte ni deja traza", async () => {
+      await runAs(db, staffA, async (q) => {
+        await q("savepoint s");
+        await expect(q(call, [TICKET_A, "abierto", "abierto"])).rejects.toMatchObject({ code: INVALID_TRANSITION });
+        await q("rollback to savepoint s");
+        expect((await q(ticketState, [TICKET_A])).rows[0].status).toBe("abierto");
+        expect((await q(trace, [TICKET_A])).rows).toHaveLength(0);
+      });
+    });
+
+    it("las tres transiciones de la app siguen permitidas", async () => {
+      await runAs(db, staffA, async (q) => {
+        expect((await q(call, [TICKET_A, "abierto", "en_curso"])).rows[0].ok).toBe(true);
+        expect((await q(call, [TICKET_A, "en_curso", "cerrado"])).rows[0].ok).toBe(true);
+      });
+      await runAs(db, staffA, async (q) => {
+        expect((await q(call, [TICKET_A, "abierto", "cerrado"])).rows[0].ok).toBe(true);
+      });
+    });
+
+    it("si falla la inserción en el historial, el cambio de estado se revierte (atomicidad)", async () => {
+      await db.query("begin");
+      try {
+        // Sabotaje solo dentro de esta transacción: toda inserción en ticket_updates falla.
+        await db.query(`create function pg_temp.fail_trace() returns trigger language plpgsql as $$ begin raise exception 'trace down'; end $$`);
+        await db.query(`create trigger fail_trace before insert on public.ticket_updates for each row execute function pg_temp.fail_trace()`);
+        await db.query("select set_config('request.jwt.claim.sub', $1, true)", [staffA.userId]);
+        await db.query("set local role authenticated");
+        await db.query("savepoint before_call");
+        await expect(db.query(call, [TICKET_A, "abierto", "cerrado"])).rejects.toThrow(/trace down/);
+        await db.query("rollback to savepoint before_call");
+        const r = await db.query(ticketState, [TICKET_A]);
+        expect(r.rows[0]).toMatchObject({ status: "abierto", closed_by: null });
+      } finally {
+        await db.query("rollback");
+      }
     });
   });
 

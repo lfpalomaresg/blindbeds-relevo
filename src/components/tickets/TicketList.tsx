@@ -15,6 +15,7 @@ export function TicketList({ orgId }: TicketListProps) {
   const [filter, setFilter] = useState<TicketStatus | "todas">("abierto");
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -33,23 +34,25 @@ export function TicketList({ orgId }: TicketListProps) {
     return () => { active = false; };
   }, [orgId, filter, tick, supabase]);
 
-  async function updateStatus(ticketId: string, newStatus: TicketStatus) {
+  async function updateStatus(ticketId: string, currentStatus: TicketStatus, newStatus: TicketStatus) {
+    setError("");
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
-    const updates: Record<string, unknown> = { status: newStatus };
-    if (newStatus === "cerrado") {
-      updates.closed_by = userData.user.id;
-      updates.closed_at = new Date().toISOString();
-    }
-
-    await supabase.from("maintenance_tickets").update(updates).eq("id", ticketId);
-
-    await supabase.from("ticket_updates").insert({
-      ticket_id: ticketId,
-      status_to: newStatus,
-      created_by: userData.user.id,
+    // Estado + traza en ticket_updates en una sola transacción (migración
+    // 000002). Solo cambia si el parte sigue en el estado que se veía: una
+    // lista desfasada no reabre un parte cerrado ni pisa quién/cuándo lo cerró.
+    const { data: changed, error: rpcError } = await supabase.rpc("change_ticket_status", {
+      p_ticket_id: ticketId,
+      p_from: currentStatus,
+      p_to: newStatus,
     });
+
+    if (rpcError) {
+      setError("No se pudo actualizar el parte: " + rpcError.message);
+    } else if (changed !== true) {
+      setError("El parte cambió de estado en otro dispositivo. Se ha actualizado la lista.");
+    }
 
     setLoading(true);
     setTick((t) => t + 1);
@@ -82,6 +85,8 @@ export function TicketList({ orgId }: TicketListProps) {
           </button>
         ))}
       </div>
+
+      {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
 
       {tickets.length === 0 && (
         <p className="text-gray-500 text-center py-8">
@@ -117,7 +122,7 @@ export function TicketList({ orgId }: TicketListProps) {
             <div className="flex gap-2">
               {ticket.status === "abierto" && (
                 <button
-                  onClick={() => updateStatus(ticket.id, "en_curso")}
+                  onClick={() => updateStatus(ticket.id, ticket.status, "en_curso")}
                   className="px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
                 >
                   En curso
@@ -125,7 +130,7 @@ export function TicketList({ orgId }: TicketListProps) {
               )}
               {(ticket.status === "abierto" || ticket.status === "en_curso") && (
                 <button
-                  onClick={() => updateStatus(ticket.id, "cerrado")}
+                  onClick={() => updateStatus(ticket.id, ticket.status, "cerrado")}
                   className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
                 >
                   Cerrar

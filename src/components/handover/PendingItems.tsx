@@ -13,6 +13,8 @@ export function PendingItems({ orgId }: PendingItemsProps) {
   const supabase = useMemo(() => createBrowserClient(), []);
   const [items, setItems] = useState<HandoverItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -34,19 +36,48 @@ export function PendingItems({ orgId }: PendingItemsProps) {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
-    await supabase
+    setError("");
+    setNotice("");
+    // Solo los no resueltos: si otra persona ya lo resolvió, no se pisa quién y cuándo.
+    const { data: changed, error: updateError } = await supabase
       .from("handover_items")
       .update({ resolved: true, resolved_by: userData.user.id, resolved_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("resolved", false)
+      .select("id");
+
+    if (updateError) {
+      setError("No se pudo resolver el pendiente: " + updateError.message);
+      return;
+    }
+    if (!changed || changed.length === 0) {
+      setNotice("Ese pendiente ya estaba resuelto por otra persona.");
+    }
 
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
 
   if (loading) return <p className="text-gray-500 text-sm">Cargando...</p>;
-  if (items.length === 0) return <p className="text-gray-500 text-sm">No hay pendientes. ✅</p>;
+
+  const messages = (
+    <>
+      {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
+      {notice && <p role="status" className="text-gray-600 text-sm">{notice}</p>}
+    </>
+  );
+
+  if (items.length === 0) {
+    return (
+      <div className="space-y-2">
+        {messages}
+        <p className="text-gray-500 text-sm">No hay pendientes. ✅</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
+      {messages}
       {items.map((item) => (
         <div key={item.id} className="flex items-start justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <div>

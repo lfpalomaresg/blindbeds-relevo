@@ -8,13 +8,15 @@
  * tocar ningún Supabase.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const ROOT = resolve(__dirname, "../..");
 const SCRIPT = join(ROOT, "scripts/setup-supabase-pro.sh");
+/** Migraciones secuenciales del repo, en el orden en que deben aplicarse. */
+const MIGRATIONS = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql")).sort();
 
 const SERVICE_ROLE_KEY = "service-role-secret-DO-NOT-PRINT";
 const ENV_OK = [
@@ -85,7 +87,7 @@ beforeEach(() => {
   // El script lee las rutas relativas al cwd: copiamos solo lo que necesita.
   mkdirSync(join(work, "supabase/migrations"), { recursive: true });
   mkdirSync(join(work, "scripts"), { recursive: true });
-  cpSync(join(ROOT, "supabase/migrations/000001_baseline.sql"), join(work, "supabase/migrations/000001_baseline.sql"));
+  for (const f of MIGRATIONS) cpSync(join(ROOT, "supabase/migrations", f), join(work, "supabase/migrations", f));
   cpSync(join(ROOT, "scripts/seed-demo.sql"), join(work, "scripts/seed-demo.sql"));
 });
 
@@ -145,8 +147,11 @@ describe("scripts/setup-supabase-pro.sh", () => {
     expect(r.status, r.out).toBe(0);
 
     const calls = psqlCalls();
-    expect(calls[0]).toMatch(/-f supabase\/migrations\/000001_baseline\.sql/);
-    expect(calls[1]).toMatch(/-f scripts\/seed-demo\.sql/);
+    // Todas las migraciones secuenciales, en orden, y después el seed.
+    expect(MIGRATIONS[0]).toBe("000001_baseline.sql");
+    expect(MIGRATIONS).toContain("000002_change_ticket_status.sql");
+    MIGRATIONS.forEach((f, i) => expect(calls[i]).toContain(`-f supabase/migrations/${f}`));
+    expect(calls[MIGRATIONS.length]).toMatch(/-f scripts\/seed-demo\.sql/);
     for (const c of calls) {
       expect(c).toContain("postgresql://postgres:db-password-example@db.abcxyz.supabase.co:5432/postgres");
     }
@@ -157,8 +162,8 @@ describe("scripts/setup-supabase-pro.sh", () => {
       expect(calls.some((c) => c.includes("rowsecurity") && c.includes(`tablename='${t}'`)), t).toBe(true);
     }
     expect(calls.some((c) => c.includes("storage.buckets") && c.includes("ticket-photos"))).toBe(true);
-    // 2 ficheros + 7 tablas + 7 RLS + 1 bucket
-    expect(calls).toHaveLength(17);
+    // migraciones + seed + 7 tablas + 7 RLS + 1 bucket
+    expect(calls).toHaveLength(MIGRATIONS.length + 1 + 15);
 
     expect(r.out).toMatch(/Setup completo/);
     expect(r.out).toContain("NEXT_PUBLIC_SUPABASE_URL      = https://abcxyz.supabase.co");
@@ -181,6 +186,6 @@ describe("scripts/setup-supabase-pro.sh", () => {
   it("solo aplica ficheros de supabase/migrations, nunca la variante de supabase/variants", () => {
     writeFileSync(join(work, ".env.local"), ENV_OK);
     run();
-    for (const c of psqlCalls()) expect(c).not.toMatch(/variants|000002/);
+    for (const c of psqlCalls()) expect(c).not.toMatch(/variants|relevo_tables/);
   });
 });

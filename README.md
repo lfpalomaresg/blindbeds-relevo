@@ -37,7 +37,7 @@ src/
 ├── types/              # Tipos compartidos
 └── hooks/              # useAuth
 supabase/
-├── migrations/         # 000001_baseline.sql (lo único que se aplica)
+├── migrations/         # 000001_baseline.sql + secuenciales (000002_change_ticket_status.sql); se aplican en orden
 └── variants/           # 000002: variante «proyecto compartido APPCC», NO aplicar
 tests/
 ├── db/                 # Matriz RLS sobre Postgres efímero (initdb + pg_ctl)
@@ -63,7 +63,7 @@ npm run test:rls                    # Solo matriz RLS; exige initdb/pg_ctl insta
 ## Migraciones
 
 ```bash
-./scripts/setup-supabase-pro.sh   # Aplica baseline + seed y verifica (ver docs/20_ACTIVACION_SUPABASE.md)
+./scripts/setup-supabase-pro.sh   # Aplica las migraciones en orden + seed y verifica (ver docs/20_ACTIVACION_SUPABASE.md)
 npx supabase db push              # Alternativa: aplica supabase/migrations/ con la CLI
 ```
 

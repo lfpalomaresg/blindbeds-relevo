@@ -2,7 +2,7 @@
  * Supabase falso en memoria para tests de componentes.
  *
  * Imita el subconjunto del cliente que usan los componentes (auth.getUser,
- * from().select/insert/update + filtros, storage.from().upload) y registra cada
+ * from().select/insert/update + filtros, rpc, storage.from().upload) y registra cada
  * llamada para poder afirmar sobre lo que el componente envió. No habla con la
  * red. Las consultas select filtran las filas del fixture por los `eq`
  * aplicados, suficiente para los listados de la app.
@@ -30,6 +30,13 @@ export interface FakeSupabaseOptions {
   insertErrors?: Record<string, { message: string }>;
   updateErrors?: Record<string, { message: string }>;
   uploadError?: { message: string } | null;
+  /** Resultado de supabase.rpc(nombre) por función. Por defecto { data: true, error: null }. */
+  rpcResults?: Record<string, { data: unknown; error: { message: string } | null }>;
+}
+
+export interface RpcCall {
+  fn: string;
+  args: unknown;
 }
 
 type Result = { data: unknown; error: { message: string } | null };
@@ -44,7 +51,7 @@ class QueryBuilder implements PromiseLike<Result> {
   constructor(private readonly table: string, private readonly fake: FakeSupabase) {}
 
   select() {
-    if (this.op === "select") this.wantRows = true;
+    if (this.op === "select" || this.op === "update") this.wantRows = true;
     return this;
   }
   insert(payload: unknown) { this.op = "insert"; this.payload = payload; return this; }
@@ -66,13 +73,19 @@ class QueryBuilder implements PromiseLike<Result> {
       const withIds = rows.map((r, i) => ({ id: `${this.table}-new-${this.fake.calls.length}-${i}`, ...(r as object) }));
       return { data: this.wantSingle ? withIds[0] : withIds, error: null };
     }
-    if (this.op === "update" || this.op === "delete") {
-      const err = this.fake.options.updateErrors?.[this.table] ?? null;
-      return { data: null, error: err };
-    }
     const rows = (this.fake.options.tables?.[this.table] ?? []).filter((row) =>
       this.filters.every(([col, val]) => row[col] === val),
     );
+    if (this.op === "update" || this.op === "delete") {
+      const err = this.fake.options.updateErrors?.[this.table] ?? null;
+      if (err) return { data: null, error: err };
+      // update().select(): como PostgREST, devuelve las filas afectadas (sin
+      // mutar el fixture). Sin select() devuelve data null.
+      if (this.op === "update" && this.wantRows) {
+        return { data: rows.map((r) => ({ ...r, ...(this.payload as object) })), error: null };
+      }
+      return { data: null, error: null };
+    }
     if (this.wantSingle) return { data: rows[0] ?? null, error: null };
     return { data: rows, error: null };
   }
@@ -100,6 +113,13 @@ export class FakeSupabase {
 
   from(table: string) {
     return new QueryBuilder(table, this);
+  }
+
+  rpcCalls: RpcCall[] = [];
+
+  async rpc(fn: string, args?: unknown) {
+    this.rpcCalls.push({ fn, args });
+    return this.options.rpcResults?.[fn] ?? { data: true, error: null };
   }
 
   storage = {

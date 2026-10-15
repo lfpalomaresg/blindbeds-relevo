@@ -19,8 +19,28 @@ beforeAll(() => {
 });
 
 describe("supabase/migrations — solo migraciones secuenciales", () => {
-  it("contiene únicamente el baseline (la variante 000002 vive en supabase/variants)", () => {
-    expect(readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql"))).toEqual(["000001_baseline.sql"]);
+  it("empieza por el baseline, numeración consecutiva y sin la variante (vive en supabase/variants)", () => {
+    const files = readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql")).sort();
+    expect(files[0]).toBe("000001_baseline.sql");
+    files.forEach((f, i) => expect(f).toMatch(new RegExp(`^${String(i + 1).padStart(6, "0")}_[a-z0-9_]+\\.sql$`)));
+    expect(files).not.toContain("000002_relevo_tables.sql");
+  });
+});
+
+describe("migration 000002_change_ticket_status — cambio de estado atómico", () => {
+  let sql: string;
+  beforeAll(() => {
+    sql = readFileSync(`${MIGRATION_DIR}/000002_change_ticket_status.sql`, "utf-8").toLowerCase();
+  });
+
+  it("se ejecuta con los permisos del usuario (RLS sigue aplicando), no como definer", () => {
+    expect(sql).toContain("security invoker");
+    expect(sql).not.toContain("security definer");
+  });
+
+  it("solo authenticated puede ejecutarla", () => {
+    expect(sql).toMatch(/revoke execute on function public\.change_ticket_status\(uuid, text, text\) from public, anon/);
+    expect(sql).toMatch(/grant execute on function public\.change_ticket_status\(uuid, text, text\) to authenticated/);
   });
 });
 

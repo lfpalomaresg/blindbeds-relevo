@@ -18,7 +18,7 @@ en Debian/Ubuntu, `postgresql@17` o cualquier `postgresql@<v>` en Homebrew: el
 harness autodetecta `/opt/homebrew/opt/postgresql@<v>/bin` aunque no esté en el
 `PATH`). No usa Docker ni red: arranca un
 cluster en un directorio temporal, aplica `supabase/migrations/000001_baseline.sql`
-sobre un stub de `auth`/`storage` y comprueba las policies para
+y las migraciones secuenciales posteriores (en orden) sobre un stub de `auth`/`storage` y comprueba las policies para
 `staff / supervisor / admin`, anon, usuarios sin membership y organizaciones
 suspendidas en las 7 tablas. Si está verde, la migración es aplicable y las
 policies hacen lo que dicen.
@@ -47,8 +47,9 @@ cp .env.local.example .env.local   # rellenar las 4 variables
 ./scripts/setup-supabase-pro.sh
 ```
 
-El script: comprueba `psql`, lee `.env.local`, aplica `000001_baseline.sql`,
-carga `scripts/seed-demo.sql`, verifica las 7 tablas, que RLS esté activo en
+El script: comprueba `psql`, lee `.env.local`, aplica todas las migraciones de
+`supabase/migrations/` en orden (`000001_baseline.sql`,
+`000002_change_ticket_status.sql`, …), carga `scripts/seed-demo.sql`, verifica las 7 tablas, que RLS esté activo en
 todas y que exista el bucket privado `ticket-photos`, e imprime las variables
 públicas para Vercel. Sale con 1 en el primer fallo. Está cubierto por
 `tests/scripts/setup-supabase-pro.test.ts` con un `psql` falso.
@@ -56,6 +57,11 @@ públicas para Vercel. Sale con 1 en el primer fallo. Está cubierto por
 **No aplicar** `supabase/variants/shared-appcc/000002_relevo_tables.sql`. Es la
 variante para alojar Relevo dentro del proyecto de APPCC; duplica el baseline y
 falla con `42P07` si se aplica detrás. Ver el README de esa carpeta.
+
+**Proyectos ya creados con solo el baseline:** antes de desplegar la versión de
+la app que usa `change_ticket_status`, aplicar
+`supabase/migrations/000002_change_ticket_status.sql` (`psql "$DB_URL" -f …` o
+`supabase db push`). Sin esa función, «En curso» y «Cerrar» fallan con error.
 
 ## 4. Primer usuario y organización (10 min)
 

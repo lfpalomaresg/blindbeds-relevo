@@ -11,7 +11,7 @@
 #   ./scripts/setup-supabase-pro.sh
 #
 # Lo que hace:
-#   - Aplica las migraciones (baseline.sql)
+#   - Aplica las migraciones de supabase/migrations/ en orden (baseline + secuenciales)
 #   - Carga el seed de demo
 #   - Verifica que las tablas y policies existen
 #   - Imprime las env vars necesarias para Vercel
@@ -45,12 +45,15 @@ DB_URL="postgresql://postgres:${SUPABASE_DB_PASSWORD:?Falta SUPABASE_DB_PASSWORD
 
 echo "🔗  Conectando a: ${DB_HOST}"
 
-# ── 1. Aplicar migración baseline ───────────────────────────────────────────
+# ── 1. Aplicar migraciones (baseline + secuenciales, en orden) ──────────────
+# Solo supabase/migrations/: la variante de supabase/variants/ nunca se aplica aquí.
 
 echo ""
-echo "📋  Aplicando 000001_baseline.sql …"
-psql "$DB_URL" -f supabase/migrations/000001_baseline.sql -q
-echo "✅  Migración baseline aplicada"
+for MIGRATION in supabase/migrations/*.sql; do
+  echo "📋  Aplicando ${MIGRATION##*/} …"
+  psql "$DB_URL" -f "$MIGRATION" -q
+done
+echo "✅  Migraciones aplicadas"
 
 # ── 2. Cargar seed de demo ───────────────────────────────────────────────────
 
