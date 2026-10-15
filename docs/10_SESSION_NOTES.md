@@ -11,8 +11,8 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 SQL, relevo, partes con foto, fallo de subida, «no veo el parte», copias y
 restauración, cada comportamiento con `fichero:línea`.
 [`31_GUION_PRUEBA_USUARIOS.md`](31_GUION_PRUEBA_USUARIOS.md): sesión de ~35 min
-con jefe de recepción y técnico, datos ficticios del seed demo. README enlaza
-ambos. No duplica [`20_ACTIVACION_SUPABASE.md`](20_ACTIVACION_SUPABASE.md).
+con jefe de recepción y técnico, datos ficticios del seed demo. README los
+lista en el árbol de `docs/` (sin enlace). No duplica [`20_ACTIVACION_SUPABASE.md`](20_ACTIVACION_SUPABASE.md).
 **Pendiente** · Hallazgos al leer el código (no arreglados, fuera de alcance):
 `supervisor` no tiene permisos extra sobre `staff`; la foto se guarda pero no
 se muestra en ninguna pantalla; no hay copias ni restauración definidas;

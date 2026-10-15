@@ -81,7 +81,10 @@ Observar:
 - ¿Le sobra o le falta algún bloque?
 - Tiempo hasta «Relevo registrado» (la portada promete «2 minutos»).
 
-**Tarea R2 — Validación.** «Intenta registrar un relevo sin escribir nada.»
+**Tarea R2 — Validación.** Partiendo de la pantalla «Relevo registrado» de R1:
+«Pulsa “Nuevo relevo” e intenta registrar un relevo sin escribir nada.» El botón
+vacía los cuatro bloques pero conserva departamento y turno
+(`HandoverForm.tsx:116-124`).
 Observar si entiende el mensaje de error y si le parece razonable.
 
 Preguntas:

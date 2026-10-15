@@ -192,8 +192,43 @@ selector: una cuenta (email) por hotel.
 
 | Síntoma | Causa en el código | Qué hacer |
 |---|---|---|
-| Error tras pulsar «Registrar relevo» y el relevo «a medias» | El relevo se inserta primero y los bloques después (`HandoverForm.tsx:69-98`); si falla el segundo paso queda un relevo sin bloques | Pedir que lo repita. Limpiar huérfanos: `delete from shift_handovers h where not exists (select 1 from handover_items i where i.handover_id = h.id);` |
+| Error tras pulsar «Registrar relevo» y el relevo «a medias» | El relevo se inserta primero y los bloques después (`HandoverForm.tsx:69-98`); si falla el segundo paso queda un relevo sin bloques | Pedir que lo repita. Si hay que limpiar el relevo vacío, seguir «Borrar un relevo huérfano» (abajo): nunca un `delete` sin acotar |
 | Pulsé «Resolver» pero vuelve a salir | El error del `update` se ignora y la fila se quita solo en pantalla (`PendingItems.tsx:37-42`) | Recargar. Si reaparece, revisar sesión/membership (§5) |
+
+#### Borrar un relevo huérfano
+
+El SQL Editor elude RLS: un `delete` sin filtros alcanza los relevos de
+**todos** los hoteles del proyecto. Por eso se borra siempre un relevo concreto,
+identificado antes con un `SELECT` acotado a la organización y al usuario que
+reportó el fallo (columnas de `shift_handovers`, `000001_baseline.sql:61-70`).
+
+1. Localizar (no borra nada). Sustituir `<org_id>` y `<user_id>`; el margen de
+   10 minutos evita tocar un relevo que se esté registrando en ese momento
+   (relevo y bloques se insertan en dos pasos, `HandoverForm.tsx:69-98`):
+
+   ```sql
+   select h.id, h.department, h.shift_type, h.created_at
+   from shift_handovers h
+   where h.org_id = '<org_id>'
+     and h.created_by = '<user_id>'
+     and h.created_at > now() - interval '1 day'
+     and h.created_at < now() - interval '10 minutes'
+     and not exists (select 1 from handover_items i where i.handover_id = h.id);
+   ```
+
+2. Comprobar con el usuario que la fila (hora, departamento, turno) es la del
+   intento fallido.
+3. Borrar solo ese `id`, repitiendo la condición de huérfano por seguridad:
+
+   ```sql
+   delete from shift_handovers h
+   where h.id = '<handover_id>'
+     and h.org_id = '<org_id>'
+     and not exists (select 1 from handover_items i where i.handover_id = h.id);
+   ```
+
+   Debe responder `DELETE 1`. Si responde `DELETE 0`, el relevo ya tiene
+   bloques o el id no es de esa organización: no insistir.
 
 ---
 
@@ -389,13 +424,15 @@ procedimiento probado de copia o restauración. Lo que hay:
 Lo que el operador debe resolver antes de dar servicio (decisión, no
 implementado):
 
-1. **Copias de la base de datos.** El plan Pro de Supabase incluye copias
-   gestionadas; comprobar en el dashboard (Database → Backups) qué retención y
-   modalidad tiene el proyecto y si se activa la recuperación a un punto en el
-   tiempo. Esto no se ha verificado: no existe proyecto.
-2. **Copias de las fotos.** Las copias de base de datos de Supabase no
-   incluyen, en general, los ficheros de Storage. Hace falta un procedimiento
-   propio (descarga periódica del bucket). No existe todavía.
+1. **Copias de la base de datos.** No existe todavía un procedimiento
+   verificado. Este documento no afirma qué copias ofrece Supabase ni con qué
+   retención: hay que comprobarlo en la documentación oficial vigente de
+   Supabase y en el propio proyecto el día de la activación, y anotar aquí la
+   fuente y la fecha.
+2. **Copias de las fotos.** No existe todavía un procedimiento verificado.
+   Hay que comprobar, con la misma fuente, si las copias de Supabase cubren o
+   no el bucket `ticket-photos`; mientras no se haya demostrado con una
+   restauración, tratar las fotos como no copiadas.
 3. **Copia lógica propia** (independiente de Supabase). No existe script ni
    se ha ensayado, y por eso aquí no se da ningún comando. Requisito que impone
    el esquema: copiar solo el esquema `public` **no basta**, porque sus filas
