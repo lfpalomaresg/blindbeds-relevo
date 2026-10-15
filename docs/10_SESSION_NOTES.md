@@ -4,6 +4,25 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-10-15 — One-pager comercial en borrador (encargo f6-relevo-onepager)
+
+**Hecho** · `docs/33_ONE_PAGER_RELEVO.md`: one-pager en BORRADOR (problema, ICP,
+3 resultados, 3 pasos, diferencias por categoría de alternativa, objeciones, CTA de
+demo de 20 min) y una tabla de trazabilidad afirmación → fichero. Solo documentación;
+no se ha tocado código.
+**Pendiente** · El operador tiene que resolver los [VERIFICAR] (rango del ICP, PWA en
+iOS/Android, avisos al técnico, servidores en la UE/RGPD, permanencia, contacto) y el
+`[PRECIO: decisión del operador]`. Durante la revisión del código salieron cosas que
+afectan a la demo: el texto «Mantenimiento ha sido notificado» es falso (no hay
+notificaciones), la foto no se ve en el listado de partes, faltan
+`public/icon-192.png` y `icon-512.png`, y siguen pendientes las policies de
+`storage.objects`.
+**Decidido** · Fuera del one-pager todo lo que no existe hoy (notificaciones,
+asignación, historial por activo, informes, uso sin conexión, PMS). La comparativa
+habla de categorías y no nombra a ningún competidor.
+
+---
+
 ## 2026-10-11 — Revisión del PR #1 (Mac, careo nivel 1 con Codex)
 
 **Hecho** · Suite 272 → 276 (RLS 78 → 80, harness +2) sobre PostgreSQL 17.11
