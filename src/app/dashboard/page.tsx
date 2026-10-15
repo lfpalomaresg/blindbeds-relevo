@@ -14,7 +14,7 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">{org.name}</h1>
-        <p className="text-gray-500 mt-1">Resumen operativo del día</p>
+        <p className="text-gray-500 mt-1">Resumen operativo</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -49,7 +49,7 @@ export default function DashboardPage() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Partes de avería activos</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Partes de avería</h2>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <TicketList orgId={org.id} />
         </div>

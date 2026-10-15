@@ -13,7 +13,7 @@ export default function NewTicketPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Nuevo parte de avería</h1>
       <p className="text-gray-600">
-        Escanea el QR del activo o crea un parte manual. La foto es obligatoria.
+        Escanea el QR del activo o crea un parte manual. La foto es opcional.
       </p>
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <TicketForm orgId={org.id} />

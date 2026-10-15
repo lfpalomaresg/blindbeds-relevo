@@ -12,7 +12,7 @@
 | Base de datos | Supabase Postgres + RLS |
 | UI | Tailwind CSS 4 |
 | Tests | Vitest (+ jsdom, Testing Library, Postgres efímero para RLS) |
-| PWA | Manifest + service worker ready |
+| PWA | Manifest + service worker básicos; faltan los iconos que declara el manifest (ver `docs/32_TEXTOS_VS_REALIDAD.md`) |
 
 ## Estructura
 
@@ -47,7 +47,8 @@ tests/
 └── scripts/            # setup-supabase-pro.sh con psql falso
 docs/
 ├── 10_SESSION_NOTES.md
-└── 20_ACTIVACION_SUPABASE.md  # Runbook de activación (1 hora)
+├── 20_ACTIVACION_SUPABASE.md  # Runbook de activación (1 hora)
+└── 32_TEXTOS_VS_REALIDAD.md   # Inventario: qué promete la UI/README y qué hace el código
 ```
 
 ## Arranque local
@@ -73,7 +74,8 @@ Postgres efímero local y comprueba las policies para staff / supervisor / admin
 ## Despliegue
 
 1. Crear proyecto en Vercel conectado a este repo
-2. Configurar env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+2. Configurar env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - Nunca `SUPABASE_SERVICE_ROLE_KEY`: la app no la usa; solo la pide `scripts/setup-supabase-pro.sh` desde `.env.local` (ver `docs/20_ACTIVACION_SUPABASE.md`)
 3. Deploy
 
 ## Módulos
@@ -82,13 +84,13 @@ Postgres efímero local y comprueba las policies para staff / supervisor / admin
 Formulario estructurado de 4 bloques (pendientes, VIPs, incidencias, avisos) que cada empleado rellena al terminar su turno. Los items no resueltos persisten hasta que alguien los cierra.
 
 ### Averías (FR-006)
-Parte de avería con foto obligatoria, prioridad, y trazabilidad completa por activo. QR scannable por habitación/equipo.
+Parte de avería con foto opcional, prioridad y estado (abierto → en curso → cerrado). Tras cada cambio de estado se intenta registrar una fila en `ticket_updates` (solo con el estado nuevo); el resultado no se comprueba, así que si esa inserción falla el cambio de estado se guarda sin historial. Aún no hay vista de historial ni por activo. QR escaneable por habitación/equipo; los activos y sus códigos QR se dan de alta por SQL (no hay UI de gestión).
 
 ## Seguridad
 
 - RLS en las 7 tablas públicas con políticas por organización
-- Auth vía Supabase con magic link (sin contraseñas)
+- Auth vía Supabase con magic link (sin contraseñas). Flujo pendiente de verificar: el enlace redirige a la raíz y no a `/auth/callback`, así que probablemente no inicia sesión (riesgo R1 en `docs/32_TEXTOS_VS_REALIDAD.md`)
 - `src/proxy.ts` protege todas las rutas salvo login, callbacks de auth y ficheros PWA; falla cerrado si falta configuración
 - Validación de entrada en formularios: catálogos, límites de longitud, fotos ≤ 10 MB JPEG/PNG/WebP
-- Fotos en bucket privado scoped por org_id (`<org_id>/<uuid>.<ext>`)
+- Fotos en bucket privado; el cliente las guarda en `<org_id>/<uuid>.<ext>`, pero la migración no define policies en `storage.objects`, así que el aislamiento por organización no está impuesto en servidor (ver `docs/32_TEXTOS_VS_REALIDAD.md`)
 - Policies RLS probadas en `tests/db/rls.test.ts` sobre Postgres real
