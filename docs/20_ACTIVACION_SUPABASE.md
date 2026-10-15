@@ -191,6 +191,16 @@ Resuelto el 2026-10-12 (PR `work/activation-blockers`), con test rojo previo:
   + `tests/db/org-fks.test.ts`. El cruce se rechaza con `23503` para cualquier
   rol, incluido `service_role`.
 - ~~Sin CI~~ → `.github/workflows/ci.yml`.
+- ~~El service worker cacheaba páginas autenticadas~~ → `public/sw.js` +
+  `tests/public/sw.test.ts`. Antes precargaba y guardaba `/dashboard`,
+  `/handover/new`, etc.: en el dispositivo compartido de recepción otro usuario
+  podía ver la sesión anterior. Ahora solo guarda estáticos públicos
+  (`/_next/static/*`, `/manifest.json`, `/icon-*.png`); navegaciones, `/api`,
+  `/auth`, peticiones RSC, no-GET y otros orígenes (Supabase) van siempre a la
+  red. La caché pasa a `relevo-static-v2` y `activate` borra `relevo-v1` en los
+  dispositivos ya instalados. Consecuencia: la app ya no abre sin conexión.
+  No hay flujo de cierre de sesión en la app, así que no hay limpieza de caché
+  al salir (tampoco hace falta: la caché ya no contiene datos de sesión).
 
 Sigue pendiente; decidir y aplicar ANTES de dar Relevo por operativo:
 
