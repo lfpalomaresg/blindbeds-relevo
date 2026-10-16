@@ -104,6 +104,15 @@ describe("HandoverForm", () => {
     expect(fake.callsTo("handover_items", "insert")).toHaveLength(0);
   });
 
+  it("al registrar no garantiza que el siguiente turno lo verá: explica que quedan pendientes hasta resolverse", async () => {
+    setup();
+    type(/^avisos/i, "Cambio de proveedor de toallas");
+    submit();
+    await screen.findByText(/relevo registrado/i);
+    expect(screen.queryByText(/lo verá/i)).toBeNull();
+    expect(screen.getByText(/pendientes en el panel de inicio hasta que alguien los resuelva/i)).toBeTruthy();
+  });
+
   it("tras registrar, «Nuevo relevo» vuelve al formulario limpio", async () => {
     setup();
     type(/^vips/i, "Familia Ejemplo");
