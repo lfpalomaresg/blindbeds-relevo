@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const ROOT = resolve(__dirname, "../..");
 const SCRIPT = join(ROOT, "scripts/setup-supabase-pro.sh");
-
+/** Migraciones secuenciales del repo, en el orden en que deben aplicarse. */
 const MIGRATIONS = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql")).sort();
 
 const SERVICE_ROLE_KEY = "service-role-secret-DO-NOT-PRINT";
@@ -241,6 +241,6 @@ describe("scripts/setup-supabase-pro.sh", () => {
   it("solo aplica ficheros de supabase/migrations, nunca la variante de supabase/variants", () => {
     writeFileSync(join(work, ".env.local"), ENV_OK);
     run();
-    for (const c of psqlCalls()) expect(c).not.toMatch(/variants|000002/);
+    for (const c of psqlCalls()) expect(c).not.toMatch(/variants|relevo_tables/);
   });
 });

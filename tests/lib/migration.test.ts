@@ -19,12 +19,30 @@ beforeAll(() => {
 });
 
 describe("supabase/migrations — solo migraciones secuenciales", () => {
-  it("contiene el baseline y las migraciones secuenciales (la variante 000002 vive en supabase/variants)", () => {
+  it("contiene el baseline y las migraciones secuenciales (la variante 000002 vive en supabase/variants; 000002 queda libre a propósito)", () => {
     expect(readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql")).sort()).toEqual([
       "000001_baseline.sql",
       "000003_storage_policies.sql",
       "000004_org_scoped_fks.sql",
+      "000005_change_ticket_status.sql",
     ]);
+  });
+});
+
+describe("migration 000005_change_ticket_status — cambio de estado atómico", () => {
+  let sql: string;
+  beforeAll(() => {
+    sql = readFileSync(`${MIGRATION_DIR}/000005_change_ticket_status.sql`, "utf-8").toLowerCase();
+  });
+
+  it("se ejecuta con los permisos del usuario (RLS sigue aplicando), no como definer", () => {
+    expect(sql).toContain("security invoker");
+    expect(sql).not.toContain("security definer");
+  });
+
+  it("solo authenticated puede ejecutarla", () => {
+    expect(sql).toMatch(/revoke execute on function public\.change_ticket_status\(uuid, text, text\) from public, anon/);
+    expect(sql).toMatch(/grant execute on function public\.change_ticket_status\(uuid, text, text\) to authenticated/);
   });
 });
 
