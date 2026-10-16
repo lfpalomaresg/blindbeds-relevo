@@ -19,8 +19,12 @@ beforeAll(() => {
 });
 
 describe("supabase/migrations — solo migraciones secuenciales", () => {
-  it("contiene únicamente el baseline (la variante 000002 vive en supabase/variants)", () => {
-    expect(readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql"))).toEqual(["000001_baseline.sql"]);
+  it("contiene el baseline y las migraciones secuenciales (la variante 000002 vive en supabase/variants)", () => {
+    expect(readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql")).sort()).toEqual([
+      "000001_baseline.sql",
+      "000003_storage_policies.sql",
+      "000004_org_scoped_fks.sql",
+    ]);
   });
 });
 

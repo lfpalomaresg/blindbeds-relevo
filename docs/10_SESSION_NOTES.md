@@ -56,6 +56,44 @@ notificaciones), la foto no se ve en el listado de partes, faltan
 **Decidido** · Fuera del one-pager todo lo que no existe hoy (notificaciones,
 asignación, historial por activo, informes, uso sin conexión, PMS). La comparativa
 habla de categorías y no nombra a ningún competidor.
+## 2026-10-12 — Bloqueos de activación: CI, policies de storage, FK por org (Mac)
+
+Rama `work/activation-blockers` → PR contra `main` (sin fusionar). Nada se ha
+aplicado a ningún Supabase: no existe proyecto.
+
+**Hecho** · Suite 276 → 448 (22 ficheros; `tests/db` 80 → 223 sobre PostgreSQL
+17 real), lint 0/0, typecheck 0, `next build` OK con env ficticias. Cada punto
+con test visto en rojo antes.
+1. **CI** (`.github/workflows/ci.yml`, push y PR a `main`): `npm ci` con caché,
+   lint `--max-warnings=0`, typecheck, suite completa con el PostgreSQL del
+   runner y `next build`. `gatePg()` hace que `tests/db` FALLE en vez de
+   omitirse con `CI=true` o `RLS_REQUIRE_PG=1` (probado lanzando vitest como
+   subproceso sin binarios de Postgres: antes salía 0 con 80 omitidos).
+2. **`000003_storage_policies.sql`**: leer = miembro activo de la org del
+   prefijo; subir = igual, solo a `<org_id>/<fichero>`; borrar = admin; sin
+   update; nada para anon ni org suspendida. Matriz rol × operación × org en
+   `tests/db/storage.test.ts` contra un stub de `storage` solo para tests.
+3. **`000004_org_scoped_fks.sql`**: `unique (id, org_id)` + FK compuestas en
+   `handover_items`, `maintenance_tickets` y `ticket_updates` (esta gana
+   `org_id`, heredado del parte por trigger). El cruce da `23503` también para
+   `service_role`. Aborta con mensaje si ya hay filas cruzadas.
+- `setup-supabase-pro.sh`: aplica todas las migraciones con `ON_ERROR_STOP` y
+  una transacción por fichero (antes `psql -f` devolvía 0 aunque el SQL
+  fallara), salta el baseline si ya está, verifica policies de tablas y storage.
+- Careo nivel 1 con Codex, 2 rondas: R1 RECHAZADO (setup no re-ejecutable;
+  guardas por nombre en 000004 engañables por deriva) → corregidos con rojo
+  previo. R2 APROBADO CON CAMBIOS (baseline a medias no detectado → corregido;
+  fotos huérfanas/cuota → documentado, es el pendiente de atomicidad).
+
+**Pendiente** · Verificar las policies de storage en el Supabase real (runbook
+§6 «Fotos»): el stub no es la API de Storage. Escrituras no atómicas y fotos
+huérfanas. Referencias a usuarios de otra org (`assigned_to`, etc.).
+
+**Decidido** · Prefijo de org comparado como texto (un nombre malicioso se
+deniega, no rompe con error de cast). Sin policy de `update`: las fotos son
+inmutables. No se condiciona la subida a `owner = auth.uid()` (no verificable
+sin Supabase real). 000004 no reescribe filas cruzadas: se niega a correr.
+Queda al operador: foto obligatoria sí/no; si `staff` debe poder borrar su foto.
 
 ---
 
