@@ -95,8 +95,14 @@ describe("README frente al código", () => {
   });
 
   it("no da por aislado por org el bucket de fotos si la migración no define policies en storage.objects", () => {
-    const baseline = read("supabase/migrations/000001_baseline.sql");
-    if (!/on\s+storage\.objects/i.test(baseline)) {
+    // Cualquier migración secuencial cuenta (desde relevo#2 las policies viven en 000003).
+    const migrations = readdirSync(path.join(ROOT, "supabase/migrations"))
+      .filter((f) => f.endsWith(".sql"))
+      .map((f) => read(path.join("supabase/migrations", f)))
+      .join("\n");
+    // Cuenta una DEFINICIÓN (create policy … on storage.objects), no un drop ni un comentario.
+    const sinComentarios = migrations.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "");
+    if (!/create\s+policy\s+(?:\w+|"[^"]+")\s+on\s+storage\.objects/i.test(sinComentarios)) {
       expect(README).not.toMatch(/scoped por org_id/i);
       expect(README).toMatch(/storage\.objects/);
     }

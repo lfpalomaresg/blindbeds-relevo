@@ -4,6 +4,99 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-10-15 — Runbook de operación y guion de prueba (encargo f5-relevo-docs)
+
+**Hecho** · Solo documentación, sin tocar código.
+[`30_RUNBOOK_OPERACION.md`](30_RUNBOOK_OPERACION.md): altas/bajas/roles por
+SQL, relevo, partes con foto, fallo de subida, «no veo el parte», copias y
+restauración, cada comportamiento con `fichero:línea`.
+[`31_GUION_PRUEBA_USUARIOS.md`](31_GUION_PRUEBA_USUARIOS.md): sesión de ~35 min
+con jefe de recepción y técnico, datos ficticios del seed demo. README los
+lista en el árbol de `docs/` (sin enlace). No duplica [`20_ACTIVACION_SUPABASE.md`](20_ACTIVACION_SUPABASE.md).
+**Pendiente** · Hallazgos al leer el código (no arreglados, fuera de alcance):
+`supervisor` no tiene permisos extra sobre `staff`; la foto se guarda pero no
+se muestra en ninguna pantalla; no hay copias ni restauración definidas;
+`public/sw.js` responde desde caché a todos los GET (posible lista desfasada,
+no verificado en navegador); el login no muestra `?error=`; el enlace mágico
+vuelve a `/` y no a `/auth/callback` (verificar el día de la activación);
+`org.ts` elige una membership al azar si hay varias; `TicketList` y
+`PendingItems` ignoran errores de escritura.
+**Decidido** · Lo no implementado se marca «no existe todavía» en el runbook;
+las decisiones (foto obligatoria, caché del SW, copias de Storage) quedan para
+el operador.
+**Careo Codex (NO APTO) → corregido** · El alta de usuarios pasa a estar
+marcada como pendiente de validar (depende del login por enlace mágico) y se
+separa el operador del proyecto (SQL Editor, sin RLS) del `admin` de la app
+(sujeto a RLS, sin UI). La sección de copias dice que hoy no se puede restaurar
+y deja de dar un comando `pg_dump`. El guion usa un proyecto de prueba
+desechable en vez de borrar datos sueltos. Rechazado en parte: `pg_dump
+--schema=public` sí exporta datos (el que solo exporta el esquema es
+`--schema-only`); el comando se retira de todos modos porque sin `auth.users`
+la copia no se puede restaurar. Los dos hallazgos menores (README sin enlaces
+navegables, referencia al commit) se dejan sin tocar.
+**Careo Codex 2 (NO APTO) → corregido** · `public/sw.js` busca en la caché por
+URL sin mirar quién hizo la petición y no la vacía al cerrar sesión: en un
+dispositivo compartido puede mostrar datos de la sesión anterior (deducido,
+no verificado). El runbook (§5 y bajas) y el guion lo advierten: nada de
+dispositivos o perfiles compartidos y borrar los datos del sitio al cambiar de
+usuario hasta que se corrija el service worker. Menores sin tocar.
+## 2026-10-15 — One-pager comercial en borrador (encargo f6-relevo-onepager)
+
+**Hecho** · `docs/33_ONE_PAGER_RELEVO.md`: one-pager en BORRADOR (problema, ICP,
+3 resultados, 3 pasos, diferencias por categoría de alternativa, objeciones, CTA de
+demo de 20 min) y una tabla de trazabilidad afirmación → fichero. Solo documentación;
+no se ha tocado código.
+**Pendiente** · El operador tiene que resolver los [VERIFICAR] (rango del ICP, PWA en
+iOS/Android, avisos al técnico, servidores en la UE/RGPD, permanencia, contacto) y el
+`[PRECIO: decisión del operador]`. Durante la revisión del código salieron cosas que
+afectan a la demo: el texto «Mantenimiento ha sido notificado» es falso (no hay
+notificaciones), la foto no se ve en el listado de partes, faltan
+`public/icon-192.png` y `icon-512.png`, y siguen pendientes las policies de
+`storage.objects`.
+**Decidido** · Fuera del one-pager todo lo que no existe hoy (notificaciones,
+asignación, historial por activo, informes, uso sin conexión, PMS). La comparativa
+habla de categorías y no nombra a ningún competidor.
+## 2026-10-12 — Bloqueos de activación: CI, policies de storage, FK por org (Mac)
+
+Rama `work/activation-blockers` → PR contra `main` (sin fusionar). Nada se ha
+aplicado a ningún Supabase: no existe proyecto.
+
+**Hecho** · Suite 276 → 448 (22 ficheros; `tests/db` 80 → 223 sobre PostgreSQL
+17 real), lint 0/0, typecheck 0, `next build` OK con env ficticias. Cada punto
+con test visto en rojo antes.
+1. **CI** (`.github/workflows/ci.yml`, push y PR a `main`): `npm ci` con caché,
+   lint `--max-warnings=0`, typecheck, suite completa con el PostgreSQL del
+   runner y `next build`. `gatePg()` hace que `tests/db` FALLE en vez de
+   omitirse con `CI=true` o `RLS_REQUIRE_PG=1` (probado lanzando vitest como
+   subproceso sin binarios de Postgres: antes salía 0 con 80 omitidos).
+2. **`000003_storage_policies.sql`**: leer = miembro activo de la org del
+   prefijo; subir = igual, solo a `<org_id>/<fichero>`; borrar = admin; sin
+   update; nada para anon ni org suspendida. Matriz rol × operación × org en
+   `tests/db/storage.test.ts` contra un stub de `storage` solo para tests.
+3. **`000004_org_scoped_fks.sql`**: `unique (id, org_id)` + FK compuestas en
+   `handover_items`, `maintenance_tickets` y `ticket_updates` (esta gana
+   `org_id`, heredado del parte por trigger). El cruce da `23503` también para
+   `service_role`. Aborta con mensaje si ya hay filas cruzadas.
+- `setup-supabase-pro.sh`: aplica todas las migraciones con `ON_ERROR_STOP` y
+  una transacción por fichero (antes `psql -f` devolvía 0 aunque el SQL
+  fallara), salta el baseline si ya está, verifica policies de tablas y storage.
+- Careo nivel 1 con Codex, 2 rondas: R1 RECHAZADO (setup no re-ejecutable;
+  guardas por nombre en 000004 engañables por deriva) → corregidos con rojo
+  previo. R2 APROBADO CON CAMBIOS (baseline a medias no detectado → corregido;
+  fotos huérfanas/cuota → documentado, es el pendiente de atomicidad).
+
+**Pendiente** · Verificar las policies de storage en el Supabase real (runbook
+§6 «Fotos»): el stub no es la API de Storage. Escrituras no atómicas y fotos
+huérfanas. Referencias a usuarios de otra org (`assigned_to`, etc.).
+
+**Decidido** · Prefijo de org comparado como texto (un nombre malicioso se
+deniega, no rompe con error de cast). Sin policy de `update`: las fotos son
+inmutables. No se condiciona la subida a `owner = auth.uid()` (no verificable
+sin Supabase real). 000004 no reescribe filas cruzadas: se niega a correr.
+Queda al operador: foto obligatoria sí/no; si `staff` debe poder borrar su foto.
+
+---
+
 ## 2026-10-11 — Revisión del PR #1 (Mac, careo nivel 1 con Codex)
 
 **Hecho** · Suite 272 → 276 (RLS 78 → 80, harness +2) sobre PostgreSQL 17.11

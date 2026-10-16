@@ -71,6 +71,8 @@ export interface MaintenanceTicket {
 export interface TicketUpdate {
   id: string;
   ticket_id: string;
+  /** Heredado del parte por un trigger en BD (000004); el cliente no lo envía al insertar. */
+  org_id: string;
   status_from?: TicketStatus;
   status_to: TicketStatus;
   comment?: string;

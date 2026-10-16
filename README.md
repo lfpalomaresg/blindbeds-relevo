@@ -37,7 +37,7 @@ src/
 ├── types/              # Tipos compartidos
 └── hooks/              # useAuth
 supabase/
-├── migrations/         # 000001_baseline.sql (lo único que se aplica)
+├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org
 └── variants/           # 000002: variante «proyecto compartido APPCC», NO aplicar
 tests/
 ├── db/                 # Matriz RLS sobre Postgres efímero (initdb + pg_ctl)
@@ -48,6 +48,8 @@ tests/
 docs/
 ├── 10_SESSION_NOTES.md
 ├── 20_ACTIVACION_SUPABASE.md  # Runbook de activación (1 hora)
+├── 30_RUNBOOK_OPERACION.md    # Operación diaria en un hotel y soporte
+├── 31_GUION_PRUEBA_USUARIOS.md # Prueba con recepción y mantenimiento
 └── 32_TEXTOS_VS_REALIDAD.md   # Inventario: qué promete la UI/README y qué hace el código
 ```
 
@@ -57,14 +59,14 @@ docs/
 npm install
 cp .env.local.example .env.local   # Rellenar con credenciales de Supabase
 npm run dev                         # http://localhost:3000
-npm test                            # Tests (RLS se omite con aviso si no hay Postgres)
+npm test                            # Tests (en local RLS se omite con aviso si no hay Postgres; en CI falla)
 npm run test:rls                    # Solo matriz RLS; exige initdb/pg_ctl instalados
 ```
 
 ## Migraciones
 
 ```bash
-./scripts/setup-supabase-pro.sh   # Aplica baseline + seed y verifica (ver docs/20_ACTIVACION_SUPABASE.md)
+./scripts/setup-supabase-pro.sh   # Aplica todas las migraciones + seed y verifica (ver docs/20_ACTIVACION_SUPABASE.md)
 npx supabase db push              # Alternativa: aplica supabase/migrations/ con la CLI
 ```
 
@@ -92,5 +94,5 @@ Parte de avería con foto opcional, prioridad y estado (abierto → en curso →
 - Auth vía Supabase con magic link (sin contraseñas). Flujo pendiente de verificar: el enlace redirige a la raíz y no a `/auth/callback`, así que probablemente no inicia sesión (riesgo R1 en `docs/32_TEXTOS_VS_REALIDAD.md`)
 - `src/proxy.ts` protege todas las rutas salvo login, callbacks de auth y ficheros PWA; falla cerrado si falta configuración
 - Validación de entrada en formularios: catálogos, límites de longitud, fotos ≤ 10 MB JPEG/PNG/WebP
-- Fotos en bucket privado; el cliente las guarda en `<org_id>/<uuid>.<ext>`, pero la migración no define policies en `storage.objects`, así que el aislamiento por organización no está impuesto en servidor (ver `docs/32_TEXTOS_VS_REALIDAD.md`)
-- Policies RLS probadas en `tests/db/rls.test.ts` sobre Postgres real
+- Fotos en bucket privado scoped por org_id (`<org_id>/<uuid>.<ext>`)
+- Policies RLS (tablas y `storage.objects`) y FK por organización probadas en `tests/db/` sobre Postgres real; CI en GitHub Actions

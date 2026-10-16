@@ -67,7 +67,7 @@ Leyenda: ✅ cierto · ❌ falso, corregido · ⚠️ dudoso o fuera de alcance 
 | «RLS en las 7 tablas públicas» | `README.md:91` | 7 `enable row level security` en `supabase/migrations/000001_baseline.sql:137-143` | ✅ |
 | `src/proxy.ts` protege todo salvo login, callbacks y PWA; falla cerrado | `README.md:93` | `src/proxy.ts:11-50`, `src/lib/auth-paths.ts:7-21` | ✅ |
 | Validación: catálogos, longitudes, fotos ≤ 10 MB JPEG/PNG/WebP | `README.md:94` | `src/lib/validation.ts` | ✅ |
-| Fotos en bucket privado «**scoped por org_id**» | `README.md:95` (antes) | El bucket es privado y el cliente construye `<org_id>/<uuid>.<ext>` (`validation.ts:167-172`), pero la migración **no tiene ninguna policy `on storage.objects`**: el aislamiento por organización no lo impone el servidor | ❌ → se dice tal cual (R2) |
+| Fotos en bucket privado «**scoped por org_id**» | `README.md:95` (antes) | El bucket es privado y el cliente construye `<org_id>/<uuid>.<ext>` (`validation.ts:167-172`). Al redactar este inventario la migración no tenía policies en `storage.objects`; desde `000003_storage_policies.sql` (relevo#2) SELECT/INSERT/DELETE exigen que la 1.ª carpeta sea una org activa del usuario, así que el servidor sí impone el aislamiento | ❌ → ✅ desde `000003_storage_policies.sql` (relevo#2, `98a2dd2`): policies limitan la 1.ª carpeta al `org_id` de la membresía |
 | «Policies RLS probadas en `tests/db/rls.test.ts`» | `README.md:96` | Existe y corre sobre Postgres efímero | ✅ |
 
 ## 4. Riesgos funcionales detectados (no son textos; no se han tocado)
@@ -77,7 +77,7 @@ Leyenda: ✅ cierto · ❌ falso, corregido · ⚠️ dudoso o fuera de alcance 
   Solo funcionaría si la plantilla de correo de Supabase se cambia para usar
   `/auth/confirm?token_hash=…`, y el runbook no lo indica. Sin un Supabase real no
   se puede comprobar. Arreglo probable: `emailRedirectTo: origin + "/auth/callback"`.
-- **R2 — Subida de fotos y aislamiento.** Sin policies en `storage.objects`, Supabase
+- **R2 — Subida de fotos y aislamiento.** ✅ *Resuelto en main por `000003_storage_policies.sql` (relevo#2, 16/10); nota conservada como histórico.* Sin policies en `storage.objects`, Supabase
   rechaza por defecto las subidas de usuarios autenticados: el parte con foto
   fallaría con «Error al subir la foto». Si se añaden policies, tienen que limitar
   la primera carpeta al `org_id` de la membresía, porque si no cualquier usuario
