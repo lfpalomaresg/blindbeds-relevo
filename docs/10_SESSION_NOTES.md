@@ -4,6 +4,58 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-10-15 — Runbook de operación y guion de prueba (encargo f5-relevo-docs)
+
+**Hecho** · Solo documentación, sin tocar código.
+[`30_RUNBOOK_OPERACION.md`](30_RUNBOOK_OPERACION.md): altas/bajas/roles por
+SQL, relevo, partes con foto, fallo de subida, «no veo el parte», copias y
+restauración, cada comportamiento con `fichero:línea`.
+[`31_GUION_PRUEBA_USUARIOS.md`](31_GUION_PRUEBA_USUARIOS.md): sesión de ~35 min
+con jefe de recepción y técnico, datos ficticios del seed demo. README los
+lista en el árbol de `docs/` (sin enlace). No duplica [`20_ACTIVACION_SUPABASE.md`](20_ACTIVACION_SUPABASE.md).
+**Pendiente** · Hallazgos al leer el código (no arreglados, fuera de alcance):
+`supervisor` no tiene permisos extra sobre `staff`; la foto se guarda pero no
+se muestra en ninguna pantalla; no hay copias ni restauración definidas;
+`public/sw.js` responde desde caché a todos los GET (posible lista desfasada,
+no verificado en navegador); el login no muestra `?error=`; el enlace mágico
+vuelve a `/` y no a `/auth/callback` (verificar el día de la activación);
+`org.ts` elige una membership al azar si hay varias; `TicketList` y
+`PendingItems` ignoran errores de escritura.
+**Decidido** · Lo no implementado se marca «no existe todavía» en el runbook;
+las decisiones (foto obligatoria, caché del SW, copias de Storage) quedan para
+el operador.
+**Careo Codex (NO APTO) → corregido** · El alta de usuarios pasa a estar
+marcada como pendiente de validar (depende del login por enlace mágico) y se
+separa el operador del proyecto (SQL Editor, sin RLS) del `admin` de la app
+(sujeto a RLS, sin UI). La sección de copias dice que hoy no se puede restaurar
+y deja de dar un comando `pg_dump`. El guion usa un proyecto de prueba
+desechable en vez de borrar datos sueltos. Rechazado en parte: `pg_dump
+--schema=public` sí exporta datos (el que solo exporta el esquema es
+`--schema-only`); el comando se retira de todos modos porque sin `auth.users`
+la copia no se puede restaurar. Los dos hallazgos menores (README sin enlaces
+navegables, referencia al commit) se dejan sin tocar.
+**Careo Codex 2 (NO APTO) → corregido** · `public/sw.js` busca en la caché por
+URL sin mirar quién hizo la petición y no la vacía al cerrar sesión: en un
+dispositivo compartido puede mostrar datos de la sesión anterior (deducido,
+no verificado). El runbook (§5 y bajas) y el guion lo advierten: nada de
+dispositivos o perfiles compartidos y borrar los datos del sitio al cambiar de
+usuario hasta que se corrija el service worker. Menores sin tocar.
+## 2026-10-15 — One-pager comercial en borrador (encargo f6-relevo-onepager)
+
+**Hecho** · `docs/33_ONE_PAGER_RELEVO.md`: one-pager en BORRADOR (problema, ICP,
+3 resultados, 3 pasos, diferencias por categoría de alternativa, objeciones, CTA de
+demo de 20 min) y una tabla de trazabilidad afirmación → fichero. Solo documentación;
+no se ha tocado código.
+**Pendiente** · El operador tiene que resolver los [VERIFICAR] (rango del ICP, PWA en
+iOS/Android, avisos al técnico, servidores en la UE/RGPD, permanencia, contacto) y el
+`[PRECIO: decisión del operador]`. Durante la revisión del código salieron cosas que
+afectan a la demo: el texto «Mantenimiento ha sido notificado» es falso (no hay
+notificaciones), la foto no se ve en el listado de partes, faltan
+`public/icon-192.png` y `icon-512.png`, y siguen pendientes las policies de
+`storage.objects`.
+**Decidido** · Fuera del one-pager todo lo que no existe hoy (notificaciones,
+asignación, historial por activo, informes, uso sin conexión, PMS). La comparativa
+habla de categorías y no nombra a ningún competidor.
 ## 2026-10-12 — Bloqueos de activación: CI, policies de storage, FK por org (Mac)
 
 Rama `work/activation-blockers` → PR contra `main` (sin fusionar). Nada se ha
@@ -134,3 +186,22 @@ Suite después: 272 tests / 17 ficheros, lint 0, typecheck 0, `next build` OK.
 - No se añadió `check` a `ticket_updates.status_to` ni policies de `update` a
   `shift_handovers` (leer/marcar como leído): cambios de esquema fuera del
   encargo; documentados en el PR.
+
+## 2026-10-14 — Parches de dependencias y CI Linux (HP)
+
+### Hecho
+- Rama fix/dependency-security-20261014: Next y eslint-config-next 16.3.8, sharp 0.35.5, DOMPurify 3.4.17 y source-map-js 1.2.2. Sin cambios de lógica de aplicación, auth ni RLS.
+- Rojo: npm audit previo exit 1 (9 paquetes: 1 crítico, 7 altos, 1 bajo); GitHub lista 11 avisos sobre cuatro paquetes runtime. Verde: npm audit --omit=dev exit 0, sin vulnerabilidades de ejecución.
+- npm ci, typecheck y lint pasan. Build pasa con URL/anon key ficticias de Supabase, sin proyecto real.
+- Windows: 185 tests pasan; 11 fallan por montaje POSIX (sh ausente y binarios shell falsos); 80 RLS omitidos por falta de PostgreSQL. No se presentan como suite verde.
+- Añadido CI Linux, idéntico al workflow del PR #2: Ubuntu, Node 22, PostgreSQL efímero obligatorio, lint, typecheck, suite completa y build sin secretos. No incorpora los cambios de esquema del PR #2.
+- Revisión independiente Codex nivel 1: APTO estático para rama/PR, condicionado a CI verde; manifest/lock alineados, integridades de npm y rangos compatibles.
+
+### Pendiente
+- Ejecutar CI del PR antes de fusionar; los avisos de GitHub no se cierran hasta que el arreglo llegue a main.
+- npm audit completo conserva cinco avisos altos de desarrollo en la cadena eslint-config-next → fast-glob → micromatch → braces. El origen es braces <=3.0.3, última versión publicada 3.0.3; no hay parche compatible disponible a fecha de revisión. No usar npm audit fix --force (propone bajar eslint-config-next a 14).
+- El PR #2 de activación sigue independiente. No se ha desplegado ni creado base de datos.
+
+### Decidido
+- Aplicar versiones de parche mínimas para las 11 alertas runtime, sin saltar a Next 16.4 ni actualizar dependencias ajenas.
+- La auditoría es el reproductor rojo/verde de dependencias; la regresión funcional se verifica en Linux y PostgreSQL real.

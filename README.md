@@ -47,7 +47,9 @@ tests/
 └── scripts/            # setup-supabase-pro.sh con psql falso
 docs/
 ├── 10_SESSION_NOTES.md
-└── 20_ACTIVACION_SUPABASE.md  # Runbook de activación (1 hora)
+├── 20_ACTIVACION_SUPABASE.md  # Runbook de activación (1 hora)
+├── 30_RUNBOOK_OPERACION.md    # Operación diaria en un hotel y soporte
+└── 31_GUION_PRUEBA_USUARIOS.md # Prueba con recepción y mantenimiento
 ```
 
 ## Arranque local

@@ -40,3 +40,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Reglas comunes repos-sync (2026-10-14)
+data/datos_brutos/
+clientes/
+*.pbix
+*_REAL.xlsx
+*_REAL.csv
+.env
+.env.local
+~$*
+graphify-out/
+.claude/worktrees/
+.conclave/
+.playwright/
