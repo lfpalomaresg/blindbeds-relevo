@@ -40,6 +40,22 @@ dispositivo compartido puede mostrar datos de la sesión anterior (deducido,
 no verificado). El runbook (§5 y bajas) y el guion lo advierten: nada de
 dispositivos o perfiles compartidos y borrar los datos del sitio al cambiar de
 usuario hasta que se corrija el service worker. Menores sin tocar.
+## 2026-10-15 — One-pager comercial en borrador (encargo f6-relevo-onepager)
+
+**Hecho** · `docs/33_ONE_PAGER_RELEVO.md`: one-pager en BORRADOR (problema, ICP,
+3 resultados, 3 pasos, diferencias por categoría de alternativa, objeciones, CTA de
+demo de 20 min) y una tabla de trazabilidad afirmación → fichero. Solo documentación;
+no se ha tocado código.
+**Pendiente** · El operador tiene que resolver los [VERIFICAR] (rango del ICP, PWA en
+iOS/Android, avisos al técnico, servidores en la UE/RGPD, permanencia, contacto) y el
+`[PRECIO: decisión del operador]`. Durante la revisión del código salieron cosas que
+afectan a la demo: el texto «Mantenimiento ha sido notificado» es falso (no hay
+notificaciones), la foto no se ve en el listado de partes, faltan
+`public/icon-192.png` y `icon-512.png`, y siguen pendientes las policies de
+`storage.objects`.
+**Decidido** · Fuera del one-pager todo lo que no existe hoy (notificaciones,
+asignación, historial por activo, informes, uso sin conexión, PMS). La comparativa
+habla de categorías y no nombra a ningún competidor.
 
 ---
 
