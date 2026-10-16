@@ -231,6 +231,7 @@ describe("TicketUpdate interface", () => {
   const update: TicketUpdate = {
     id: "u1",
     ticket_id: "t1",
+    org_id: "org1",
     status_to: "en_curso",
     created_by: "usr1",
     created_at: new Date().toISOString(),

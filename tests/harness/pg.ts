@@ -56,6 +56,46 @@ export function pgAvailable(): boolean {
   return findPgBinDir() !== null;
 }
 
+type Env = Record<string, string | undefined>;
+
+function flag(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  const v = value.trim().toLowerCase();
+  return v !== "" && v !== "0" && v !== "false";
+}
+
+/**
+ * ¿Es obligatorio tener Postgres? Sí en CI (`CI=true`, lo fijan GitHub Actions
+ * y casi todos los runners) y siempre que se pida con `RLS_REQUIRE_PG=1`.
+ */
+export function pgRequired(env: Env = process.env): boolean {
+  return flag(env.RLS_REQUIRE_PG) || flag(env.CI);
+}
+
+/**
+ * Puerta de entrada de los tests de `tests/db`. Devuelve `true` si hay
+ * Postgres. Si no lo hay: en local avisa y devuelve `false` (el fichero se
+ * omite); en CI o con `RLS_REQUIRE_PG=1` LANZA, de modo que el fichero falla
+ * en vez de omitirse. Un verde con la matriz RLS saltada no prueba nada.
+ */
+export function gatePg(
+  label: string,
+  opts: { available?: boolean; env?: Env; warn?: (msg: string) => void } = {},
+): boolean {
+  const available = opts.available ?? pgAvailable();
+  if (available) return true;
+  const env = opts.env ?? process.env;
+  const msg = `[${label}] PostgreSQL no disponible (${describeEnvironment()}); tests omitidos.`;
+  if (pgRequired(env)) {
+    throw new Error(
+      `[${label}] PostgreSQL no disponible (${describeEnvironment()}) y es obligatorio ` +
+        "(CI o RLS_REQUIRE_PG): instala postgresql o define PG_BIN_DIR. Los tests de base de datos no se omiten en CI.",
+    );
+  }
+  (opts.warn ?? console.warn)(msg);
+  return false;
+}
+
 interface Runner {
   run(cmd: string, args: string[], opts?: ExecFileSyncOptions): void;
   /** Usuario del SO bajo el que corre el servidor. */

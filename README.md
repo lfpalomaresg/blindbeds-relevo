@@ -37,7 +37,7 @@ src/
 ├── types/              # Tipos compartidos
 └── hooks/              # useAuth
 supabase/
-├── migrations/         # 000001_baseline.sql + secuenciales (000002_change_ticket_status.sql); se aplican en orden
+├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico
 └── variants/           # 000002: variante «proyecto compartido APPCC», NO aplicar
 tests/
 ├── db/                 # Matriz RLS sobre Postgres efímero (initdb + pg_ctl)
@@ -47,7 +47,9 @@ tests/
 └── scripts/            # setup-supabase-pro.sh con psql falso
 docs/
 ├── 10_SESSION_NOTES.md
-└── 20_ACTIVACION_SUPABASE.md  # Runbook de activación (1 hora)
+├── 20_ACTIVACION_SUPABASE.md  # Runbook de activación (1 hora)
+├── 30_RUNBOOK_OPERACION.md    # Operación diaria en un hotel y soporte
+└── 31_GUION_PRUEBA_USUARIOS.md # Prueba con recepción y mantenimiento
 ```
 
 ## Arranque local
@@ -56,14 +58,14 @@ docs/
 npm install
 cp .env.local.example .env.local   # Rellenar con credenciales de Supabase
 npm run dev                         # http://localhost:3000
-npm test                            # Tests (RLS se omite con aviso si no hay Postgres)
+npm test                            # Tests (en local RLS se omite con aviso si no hay Postgres; en CI falla)
 npm run test:rls                    # Solo matriz RLS; exige initdb/pg_ctl instalados
 ```
 
 ## Migraciones
 
 ```bash
-./scripts/setup-supabase-pro.sh   # Aplica las migraciones en orden + seed y verifica (ver docs/20_ACTIVACION_SUPABASE.md)
+./scripts/setup-supabase-pro.sh   # Aplica todas las migraciones + seed y verifica (ver docs/20_ACTIVACION_SUPABASE.md)
 npx supabase db push              # Alternativa: aplica supabase/migrations/ con la CLI
 ```
 
@@ -91,4 +93,4 @@ Parte de avería con foto obligatoria, prioridad, y trazabilidad completa por ac
 - `src/proxy.ts` protege todas las rutas salvo login, callbacks de auth y ficheros PWA; falla cerrado si falta configuración
 - Validación de entrada en formularios: catálogos, límites de longitud, fotos ≤ 10 MB JPEG/PNG/WebP
 - Fotos en bucket privado scoped por org_id (`<org_id>/<uuid>.<ext>`)
-- Policies RLS probadas en `tests/db/rls.test.ts` sobre Postgres real
+- Policies RLS (tablas y `storage.objects`) y FK por organización probadas en `tests/db/` sobre Postgres real; CI en GitHub Actions

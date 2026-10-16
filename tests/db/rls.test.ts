@@ -1,34 +1,27 @@
 /**
  * Matriz RLS sobre un Postgres efímero real (sin Docker).
  *
- * Aplica tests/harness/supabase-stub.sql (auth/storage/roles mínimos) y la
- * migración supabase/migrations/000001_baseline.sql (+ las secuenciales
- * posteriores, en orden), carga un fixture
+ * Aplica los stubs de tests/harness (auth/storage/roles mínimos) y TODAS las
+ * migraciones de supabase/migrations en orden (tests/harness/db.ts), carga un fixture
  * sintético y comprueba las policies para staff / supervisor / admin, para
  * un usuario sin membership, para un miembro de una org suspendida y para anon,
  * en las 5 tablas de Relevo (+ organizations y memberships, que las sostienen).
  *
- * Si no hay binarios de Postgres el fichero se omite con aviso; con
- * RLS_REQUIRE_PG=1 la ausencia es un fallo (úsalo en CI).
+ * Si no hay binarios de Postgres el fichero se omite con aviso en local; en CI
+ * (`CI=true`) o con RLS_REQUIRE_PG=1 la ausencia es un FALLO (ver `gatePg`).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Client } from "pg";
-import { describeEnvironment, pgAvailable, startEphemeralPostgres, type EphemeralPostgres } from "../harness/pg";
+import { bootstrap } from "../harness/db";
+import { gatePg, startEphemeralPostgres, type EphemeralPostgres } from "../harness/pg";
 import { ANON, RLS_VIOLATION, asUser, countAs, errorCodeAs, rowCountAs, runAs } from "../harness/rls";
 
 const ROOT = resolve(__dirname, "../..");
 const STUB = resolve(ROOT, "tests/harness/supabase-stub.sql");
-const FIXTURE = resolve(ROOT, "tests/harness/fixture.sql");
 const BASELINE = resolve(ROOT, "supabase/migrations/000001_baseline.sql");
 const VARIANT_000002 = resolve(ROOT, "supabase/variants/shared-appcc/000002_relevo_tables.sql");
-/** Migraciones posteriores al baseline, en orden, como las aplicaría `db push`. */
-const MIGRATIONS_DIR = resolve(ROOT, "supabase/migrations");
-const SEQUENTIAL_MIGRATIONS = readdirSync(MIGRATIONS_DIR)
-  .filter((f) => f.endsWith(".sql") && f !== "000001_baseline.sql")
-  .sort()
-  .map((f) => resolve(MIGRATIONS_DIR, f));
 
 const ORG_A = "00000000-0000-0000-0000-00000000000a";
 const ORG_B = "00000000-0000-0000-0000-00000000000b";
@@ -53,25 +46,19 @@ const TICKET_B = "40000000-0000-0000-0000-00000000000b";
 const RELEVO_TABLES = ["shift_handovers", "handover_items", "ticket_assets", "maintenance_tickets", "ticket_updates"] as const;
 const ALL_TABLES = ["organizations", "memberships", ...RELEVO_TABLES] as const;
 
-const available = pgAvailable();
-if (!available) {
-  const msg = `[rls.test] PostgreSQL no disponible (${describeEnvironment()}); tests RLS omitidos.`;
-  if (process.env.RLS_REQUIRE_PG) throw new Error(msg);
-  console.warn(msg);
-}
+// En CI (o con RLS_REQUIRE_PG=1) lanza si no hay Postgres: el fichero falla, no se omite.
+const available = gatePg("rls.test");
 
-describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)", () => {
+describe.skipIf(!available)("RLS sobre Postgres efímero (todas las migraciones)", () => {
   let pg: EphemeralPostgres;
   let db: Client;
   let migrationError: unknown = null;
 
   beforeAll(async () => {
     pg = await startEphemeralPostgres();
-    await pg.applySqlFile(STUB);
     try {
-      await pg.applySqlFile(BASELINE);
-      for (const file of SEQUENTIAL_MIGRATIONS) await pg.applySqlFile(file);
-      await pg.applySqlFile(FIXTURE);
+      // Stubs + TODAS las migraciones de supabase/migrations en orden + fixture.
+      await bootstrap(pg);
     } catch (err) {
       migrationError = err;
     }
@@ -84,7 +71,7 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (000001_baseline.sql)",
   });
 
   describe("migración", () => {
-    it("000001_baseline.sql se aplica sin errores sobre un Postgres limpio", () => {
+    it("todas las migraciones de supabase/migrations se aplican en orden sin errores sobre un Postgres limpio", () => {
       expect(migrationError, String((migrationError as Error)?.message)).toBeNull();
     });
 

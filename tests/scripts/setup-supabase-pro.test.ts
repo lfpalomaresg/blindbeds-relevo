@@ -8,7 +8,7 @@
  * tocar ningún Supabase.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -46,6 +46,9 @@ case "$query" in
     if [ -n "\${FAKE_PSQL_MISSING_TABLE:-}" ] && [[ "$query" == *"table_name='\${FAKE_PSQL_MISSING_TABLE}'"* ]]; then echo " 0"; else echo " 1"; fi ;;
   *rowsecurity*) echo " t" ;;
   *storage.buckets*) echo " ticket-photos" ;;
+  *to_regclass*) if [ -n "\${FAKE_PSQL_BASELINE_APPLIED:-}" ]; then echo " organizations"; else echo ""; fi ;;
+  *pg_policies*"schemaname='public'"*) echo " \${FAKE_PSQL_PUBLIC_POLICIES:-16}" ;;
+  *pg_policies*) echo " \${FAKE_PSQL_STORAGE_POLICIES:-3}" ;;
   "") ;;
   *) echo "unexpected query: $query" >&2; exit 2 ;;
 esac
@@ -85,9 +88,8 @@ beforeEach(() => {
     if (real && real.startsWith("/")) symlinkSync(real, join(noPsqlBin, tool));
   }
   // El script lee las rutas relativas al cwd: copiamos solo lo que necesita.
-  mkdirSync(join(work, "supabase/migrations"), { recursive: true });
   mkdirSync(join(work, "scripts"), { recursive: true });
-  for (const f of MIGRATIONS) cpSync(join(ROOT, "supabase/migrations", f), join(work, "supabase/migrations", f));
+  cpSync(join(ROOT, "supabase/migrations"), join(work, "supabase/migrations"), { recursive: true });
   cpSync(join(ROOT, "scripts/seed-demo.sql"), join(work, "scripts/seed-demo.sql"));
 });
 
@@ -147,10 +149,17 @@ describe("scripts/setup-supabase-pro.sh", () => {
     expect(r.status, r.out).toBe(0);
 
     const calls = psqlCalls();
-    // Todas las migraciones secuenciales, en orden, y después el seed.
+    // Todas las migraciones de supabase/migrations, en orden, y después el seed.
+    expect(MIGRATIONS.length).toBeGreaterThanOrEqual(2);
     expect(MIGRATIONS[0]).toBe("000001_baseline.sql");
-    expect(MIGRATIONS).toContain("000002_change_ticket_status.sql");
-    MIGRATIONS.forEach((f, i) => expect(calls[i]).toContain(`-f supabase/migrations/${f}`));
+    expect(calls[0]).toContain("to_regclass('public.organizations')");
+    calls.shift(); // la comprobación «¿baseline ya aplicado?» va antes de las migraciones
+    MIGRATIONS.forEach((file, i) => {
+      expect(calls[i], `migración ${i + 1}`).toContain(`-f supabase/migrations/${file}`);
+      // Cada fichero en su propia transacción y parando en el primer error.
+      expect(calls[i]).toContain("ON_ERROR_STOP=1");
+      expect(calls[i]).toMatch(/--single-transaction|(^| )-1( |$)/);
+    });
     expect(calls[MIGRATIONS.length]).toMatch(/-f scripts\/seed-demo\.sql/);
     for (const c of calls) {
       expect(c).toContain("postgresql://postgres:db-password-example@db.abcxyz.supabase.co:5432/postgres");
@@ -162,8 +171,10 @@ describe("scripts/setup-supabase-pro.sh", () => {
       expect(calls.some((c) => c.includes("rowsecurity") && c.includes(`tablename='${t}'`)), t).toBe(true);
     }
     expect(calls.some((c) => c.includes("storage.buckets") && c.includes("ticket-photos"))).toBe(true);
-    // migraciones + seed + 7 tablas + 7 RLS + 1 bucket
-    expect(calls).toHaveLength(MIGRATIONS.length + 1 + 15);
+    expect(calls.some((c) => c.includes("pg_policies") && c.includes("ticket_photos_"))).toBe(true);
+    // migraciones + seed + 7 tablas + 7 RLS + 1 bucket + 1 policies de storage
+    expect(calls).toHaveLength(MIGRATIONS.length + 1 + 7 + 7 + 1 + 1 + 1); // + policies RLS de public
+    expect(psqlCalls()).toHaveLength(calls.length + 1);
 
     expect(r.out).toMatch(/Setup completo/);
     expect(r.out).toContain("NEXT_PUBLIC_SUPABASE_URL      = https://abcxyz.supabase.co");
@@ -181,6 +192,50 @@ describe("scripts/setup-supabase-pro.sh", () => {
     const r = run({ env: { FAKE_PSQL_MISSING_TABLE: "handover_items" } });
     expect(r.status).toBe(1);
     expect(r.out).toMatch(/handover_items.*NO ENCONTRADA/);
+  });
+
+  it("re-ejecución sobre un proyecto con el baseline ya aplicado: salta 000001 y aplica las demás", () => {
+    writeFileSync(join(work, ".env.local"), ENV_OK);
+    const r = run({ env: { FAKE_PSQL_BASELINE_APPLIED: "1" } });
+    expect(r.status, r.out).toBe(0);
+    const files = psqlCalls().filter((c) => c.includes(" -f ") || c.includes("-f supabase") || c.includes("-f scripts"));
+    expect(files.some((c) => c.includes("000001_baseline.sql"))).toBe(false);
+    for (const m of MIGRATIONS.slice(1)) expect(files.some((c) => c.includes(m)), m).toBe(true);
+    expect(r.out).toMatch(/000001_baseline\.sql ya aplicada/);
+    expect(r.out).toMatch(/Setup completo/);
+  });
+
+  it("baseline a medias (existe organizations pero faltan policies de las tablas): sale con 1, no dice «completo»", () => {
+    writeFileSync(join(work, ".env.local"), ENV_OK);
+    const r = run({ env: { FAKE_PSQL_BASELINE_APPLIED: "1", FAKE_PSQL_PUBLIC_POLICIES: "9" } });
+    expect(r.status).toBe(1);
+    expect(r.out).toMatch(/policies RLS.*encontradas: 9, esperadas: 16/);
+    expect(r.out).not.toMatch(/Setup completo/);
+  });
+
+  it("el número de policies esperado coincide con las que declara el baseline", () => {
+    const baseline = readFileSync(join(ROOT, "supabase/migrations/000001_baseline.sql"), "utf8");
+    const declared = (baseline.match(/^create policy /gm) ?? []).length;
+    expect(readFileSync(SCRIPT, "utf8")).toContain(`EXPECTED_PUBLIC_POLICIES=${declared}`);
+  });
+
+  it("si faltan policies de storage para ticket-photos, sale con 1 y lo dice", () => {
+    writeFileSync(join(work, ".env.local"), ENV_OK);
+    const r = run({ env: { FAKE_PSQL_STORAGE_POLICIES: "0" } });
+    expect(r.status).toBe(1);
+    expect(r.out).toMatch(/policies de storage.*ticket-photos/i);
+    expect(r.out).not.toMatch(/Setup completo/);
+  });
+
+  it("si una migración falla, corta y no aplica las siguientes ni el seed", () => {
+    writeFileSync(join(work, ".env.local"), ENV_OK);
+    rmSync(join(work, "supabase/migrations", MIGRATIONS[1]));
+    mkdirSync(join(work, "supabase/migrations", MIGRATIONS[1])); // -f sobre un directorio: el psql falso falla
+    const r = run();
+    expect(r.status).not.toBe(0);
+    const calls = psqlCalls();
+    expect(calls).toHaveLength(3); // comprobación de baseline + 000001 + la que falla
+    expect(r.out).not.toMatch(/Setup completo/);
   });
 
   it("solo aplica ficheros de supabase/migrations, nunca la variante de supabase/variants", () => {

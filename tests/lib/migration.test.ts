@@ -19,18 +19,20 @@ beforeAll(() => {
 });
 
 describe("supabase/migrations — solo migraciones secuenciales", () => {
-  it("empieza por el baseline, numeración consecutiva y sin la variante (vive en supabase/variants)", () => {
-    const files = readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql")).sort();
-    expect(files[0]).toBe("000001_baseline.sql");
-    files.forEach((f, i) => expect(f).toMatch(new RegExp(`^${String(i + 1).padStart(6, "0")}_[a-z0-9_]+\\.sql$`)));
-    expect(files).not.toContain("000002_relevo_tables.sql");
+  it("contiene el baseline y las migraciones secuenciales (la variante 000002 vive en supabase/variants; 000002 queda libre a propósito)", () => {
+    expect(readdirSync(MIGRATION_DIR).filter((f) => f.endsWith(".sql")).sort()).toEqual([
+      "000001_baseline.sql",
+      "000003_storage_policies.sql",
+      "000004_org_scoped_fks.sql",
+      "000005_change_ticket_status.sql",
+    ]);
   });
 });
 
-describe("migration 000002_change_ticket_status — cambio de estado atómico", () => {
+describe("migration 000005_change_ticket_status — cambio de estado atómico", () => {
   let sql: string;
   beforeAll(() => {
-    sql = readFileSync(`${MIGRATION_DIR}/000002_change_ticket_status.sql`, "utf-8").toLowerCase();
+    sql = readFileSync(`${MIGRATION_DIR}/000005_change_ticket_status.sql`, "utf-8").toLowerCase();
   });
 
   it("se ejecuta con los permisos del usuario (RLS sigue aplicando), no como definer", () => {

@@ -40,7 +40,7 @@ export function TicketList({ orgId }: TicketListProps) {
     if (!userData.user) return;
 
     // Estado + traza en ticket_updates en una sola transacción (migración
-    // 000002). Solo cambia si el parte sigue en el estado que se veía: una
+    // 000005). Solo cambia si el parte sigue en el estado que se veía: una
     // lista desfasada no reabre un parte cerrado ni pisa quién/cuándo lo cerró.
     const { data: changed, error: rpcError } = await supabase.rpc("change_ticket_status", {
       p_ticket_id: ticketId,
