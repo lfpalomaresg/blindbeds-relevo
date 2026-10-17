@@ -49,27 +49,36 @@ describe("TicketList", () => {
     await screen.findByText(/no hay partes abiertos/i);
   });
 
-  it("«En curso» actualiza el estado y deja traza en ticket_updates", async () => {
+  // El cambio de estado y su traza en ticket_updates los hace la función
+  // change_ticket_status en una sola transacción (ver tests/db/rls.test.ts).
+  it("«En curso» cambia el estado con change_ticket_status desde el estado que se veía", async () => {
     const fake = setup({ user: { id: "user-mant" } });
     const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
     fireEvent.click(card.getByRole("button", { name: /^en curso$/i }));
-    await waitFor(() => expect(fake.callsTo("ticket_updates", "insert")).toHaveLength(1));
-
-    const [update] = fake.callsTo("maintenance_tickets", "update");
-    expect(update.payload).toEqual({ status: "en_curso" });
-    expect(update.filters).toEqual([["id", "t1"]]);
-
-    const [trace] = fake.callsTo("ticket_updates", "insert");
-    expect(trace.payload).toMatchObject({ ticket_id: "t1", status_to: "en_curso", created_by: "user-mant" });
+    await waitFor(() => expect(fake.rpcCalls).toHaveLength(1));
+    expect(fake.rpcCalls[0]).toEqual({
+      fn: "change_ticket_status",
+      args: { p_ticket_id: "t1", p_from: "abierto", p_to: "en_curso" },
+    });
   });
 
-  it("«Cerrar» registra quién y cuándo cierra", async () => {
+  it("no hace escrituras sueltas (update + insert no atómicos) desde el cliente", async () => {
     const fake = setup({ user: { id: "user-mant" } });
     const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
     fireEvent.click(card.getByRole("button", { name: /^cerrar$/i }));
-    await waitFor(() => expect(fake.callsTo("maintenance_tickets", "update")).toHaveLength(1));
-    const [update] = fake.callsTo("maintenance_tickets", "update");
-    expect(update.payload).toMatchObject({ status: "cerrado", closed_by: "user-mant", closed_at: expect.any(String) });
+    await waitFor(() => expect(fake.rpcCalls).toHaveLength(1));
+    expect(fake.callsTo("maintenance_tickets", "update")).toHaveLength(0);
+    expect(fake.callsTo("ticket_updates", "insert")).toHaveLength(0);
+  });
+
+  it("«Cerrar» pide el cierre desde el estado actual del parte", async () => {
+    const fake = setup({ user: { id: "user-mant" } });
+    await screen.findByText("Grifo gotea");
+    fireEvent.click(screen.getByRole("button", { name: /^todas$/i }));
+    const card = within(await screen.findByRole("article", { name: "Luz fundida" }));
+    fireEvent.click(card.getByRole("button", { name: /^cerrar$/i }));
+    await waitFor(() => expect(fake.rpcCalls).toHaveLength(1));
+    expect(fake.rpcCalls[0].args).toEqual({ p_ticket_id: "t2", p_from: "en_curso", p_to: "cerrado" });
   });
 
   it("sin sesión no cambia estados", async () => {
@@ -77,8 +86,33 @@ describe("TicketList", () => {
     const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
     fireEvent.click(card.getByRole("button", { name: /^cerrar$/i }));
     await waitFor(() => expect(fake.auth.getUser).toHaveBeenCalled());
-    expect(fake.callsTo("maintenance_tickets", "update")).toHaveLength(0);
-    expect(fake.callsTo("ticket_updates", "insert")).toHaveLength(0);
+    expect(fake.rpcCalls).toHaveLength(0);
+  });
+
+  it("si otro usuario ya cambió el parte (la función devuelve false), avisa y recarga", async () => {
+    const fake = setup({ user: { id: "user-mant" }, rpcResults: { change_ticket_status: { data: false, error: null } } });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    fireEvent.click(card.getByRole("button", { name: /^en curso$/i }));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert").textContent).toMatch(/cambió de estado/i);
+    expect(fake.callsTo("maintenance_tickets", "select")).toHaveLength(2);
+  });
+
+  it("si la base de datos rechaza el cambio, muestra el error", async () => {
+    setup({ user: { id: "user-mant" }, rpcResults: { change_ticket_status: { data: null, error: { message: "permission denied" } } } });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    fireEvent.click(card.getByRole("button", { name: /^cerrar$/i }));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert").textContent).toMatch(/no se pudo actualizar/i);
+  });
+
+  it("si el cambio se aplica, no muestra ningún aviso", async () => {
+    const fake = setup({ user: { id: "user-mant" } });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    fireEvent.click(card.getByRole("button", { name: /^en curso$/i }));
+    await waitFor(() => expect(fake.callsTo("maintenance_tickets", "select")).toHaveLength(2));
+    await screen.findByRole("group", { name: /filtrar por estado/i });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("los partes cerrados no ofrecen acciones", async () => {
