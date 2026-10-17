@@ -94,6 +94,15 @@ describe("TicketForm", () => {
     expect(onCreated).toHaveBeenCalledTimes(1);
   });
 
+  it("al crear el parte no promete una notificación que no existe", async () => {
+    setup({ user: { id: "user-staff" } });
+    type(/título/i, "Grifo gotea");
+    submit();
+    await screen.findByText(/parte de avería creado/i);
+    expect(screen.queryByText(/notificad/i)).toBeNull();
+    expect(screen.getByText(/panel de inicio/i)).toBeTruthy();
+  });
+
   it("rechaza una foto de más de 10 MB antes de subir nada", async () => {
     const fake = setup();
     type(/título/i, "Grifo gotea");

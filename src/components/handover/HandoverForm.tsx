@@ -111,7 +111,7 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
         <p className="text-gray-600">
           El turno de <strong>{SHIFT_TYPES.find((s) => s.value === shiftType)?.label}</strong> en{" "}
           <strong>{DEPARTMENTS.find((d) => d.value === department)?.label}</strong> ha quedado
-          documentado. El siguiente turno lo verá al entrar.
+          documentado. Sus puntos quedan como pendientes en el panel de inicio hasta que alguien los resuelva.
         </p>
         <button
           onClick={() => {

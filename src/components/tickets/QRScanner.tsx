@@ -11,6 +11,7 @@ interface QRScannerProps {
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState("");
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const scanActiveRef = useRef(true);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -31,8 +32,10 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
         await videoRef.current.play();
       }
       requestAnimationFrame(scanLoop);
-    } catch {
-      setError("No se pudo acceder a la cámara. Verifica los permisos.");
+    } catch (err) {
+      // Solo NotAllowedError es un permiso denegado; sin cámara o sin HTTPS los permisos no ayudan.
+      setPermissionDenied(err instanceof DOMException && err.name === "NotAllowedError");
+      setError("No se pudo acceder a la cámara.");
     }
   }
 
@@ -79,13 +82,17 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
       {error ? (
         <div className="flex-1 flex items-center justify-center text-white text-center p-6">
           <div>
-            <p className="text-lg mb-2">📷 Acceso a cámara denegado</p>
-            <p className="text-sm text-gray-400">Permite el acceso desde la configuración del navegador</p>
+            <p className="text-lg mb-2">📷 Cámara no disponible</p>
+            <p className="text-sm text-gray-400">
+              {permissionDenied
+                ? "Permite el acceso desde la configuración del navegador"
+                : "Comprueba que el dispositivo tiene cámara y que la página se abre por HTTPS"}
+            </p>
             <button
               onClick={onClose}
               className="mt-4 px-4 py-2 bg-orange-600 rounded"
             >
-              Introducir código manualmente
+              Continuar sin escanear
             </button>
           </div>
         </div>

@@ -120,7 +120,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
           <span className="text-3xl">✅</span>
         </div>
         <h2 className="text-xl font-semibold">Parte de avería creado</h2>
-        <p className="text-gray-600">Mantenimiento ha sido notificado.</p>
+        <p className="text-gray-600">Queda abierto y visible en el panel de inicio.</p>
         <button
           onClick={() => {
             setDone(false);
