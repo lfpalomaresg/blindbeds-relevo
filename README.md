@@ -37,7 +37,7 @@ src/
 ├── types/              # Tipos compartidos
 └── hooks/              # useAuth
 supabase/
-├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico · 000006 relevo atómico · 000007 directorio de autores · 000008 retención de relevos (90 días)
+├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico · 000006 relevo atómico · 000007 emails de autores de relevos · 000008 retención de relevos (90 días)
 └── variants/           # 000002: variante «proyecto compartido APPCC», NO aplicar
 tests/
 ├── db/                 # Matriz RLS sobre Postgres efímero (initdb + pg_ctl)

@@ -10,8 +10,9 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 (últimos 50 relevos con departamento, turno, autor y hora; filtro por
 departamento) y `/handover/[id]` (ítems por bloque, resueltos tachados); enlace
 «Ver relevos» en el panel y «Relevos» en la cabecera. Autor vía
-`org_member_directory` (000007, security definer acotado a las orgs del
-usuario). R4b: foto del parte con URL firmada de 300 s (`TicketPhoto`); la lista
+`handover_author_emails` (000007, security definer con `search_path = ''`:
+solo emails de los autores visibles con relevos en la org del usuario, tras el
+gate de Codex ronda 1). R4b: foto del parte con URL firmada de 300 s (`TicketPhoto`); la lista
 de partes arranca en «Abiertos y en curso». R4c: «Código del activo» manual
 que busca `ticket_assets.qr_code` en la org. Minimización: aviso literal en los
 4 bloques del relevo (`src/lib/privacy.ts`, `aria-describedby`); el bloque VIPs
@@ -24,8 +25,8 @@ sin «Suite». Tests rojo→verde: 18 fallos → 571 verdes; tsc, lint y build
 (con env públicas de relleno) en verde.
 **Pendiente** · Smoke en Supabase real (URL firmada y 403 entre orgs, pg_cron);
 Lighthouse «installable»; borrado manual de un ítem por el admin desde la app y
-procedimiento de incidente (MUST de minimización, parte M); careo antes de
-fusionar (toca security definer).
+procedimiento de incidente (MUST de minimización, parte M); smoke de
+`createSignedUrl` con path de otra org (anotado en el runbook §3).
 **Decidido** · El autor se muestra por email (no hay perfiles); un autor dado
 de baja sale como «Autor no disponible». La retención no tiene parámetro (90
 días fijos) para que nadie la llame con un plazo menor por error.

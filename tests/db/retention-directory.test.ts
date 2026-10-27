@@ -1,12 +1,12 @@
 /**
- * Retención de relevos (000008) y directorio de autores (000007) sobre
+ * Retención de relevos (000008) y emails de autores de relevos (000007) sobre
  * Postgres efímero.
  *
  * - purge_expired_handovers(): borra los relevos de más de 90 días (y sus
  *   ítems, por cascada). Solo la ejecuta el operador / pg_cron / service_role;
  *   un usuario de la app no puede.
- * - org_member_directory(org): user_id + email de los miembros de una org a la
- *   que pertenece quien llama. Fuera de su org: nada.
+ * - handover_author_emails(org, ids): user_id + email SOLO de los ids pedidos
+ *   que sean autores de relevos de una org a la que pertenece quien llama.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Client } from "pg";
@@ -30,7 +30,7 @@ const OLD_B = "60000000-0000-0000-0000-0000000000b1";
 
 const available = gatePg("retention-directory.test");
 
-describe.skipIf(!available)("retención de relevos (000008) y directorio de autores (000007)", () => {
+describe.skipIf(!available)("retención de relevos (000008) y emails de autores (000007)", () => {
   let pg: EphemeralPostgres;
   let owner: Client;
 
@@ -101,27 +101,87 @@ describe.skipIf(!available)("retención de relevos (000008) y directorio de auto
     }
   });
 
-  it("directorio: un miembro ve user_id + email de los miembros de su org", async () => {
-    const rows = await runAs(owner, staffA, async (q) =>
-      (await q(`select user_id, email from public.org_member_directory($1) order by email`, [ORG_A])).rows,
+  // ─── handover_author_emails (000007) ───
+  // Minimización: solo emails de AUTORES de relevos de la org del llamante y,
+  // de esos, solo los ids pedidos (los de la lista que está viendo).
+  const AUTHORS = `select user_id, email from public.handover_author_emails($1, $2::uuid[]) order by email`;
+  const STAFF_A = "aaaaaaaa-0000-0000-0000-00000000001a";
+  const SUPER_A = "aaaaaaaa-0000-0000-0000-00000000002a";
+  const ADMIN_A = "aaaaaaaa-0000-0000-0000-00000000003a";
+  const STAFF_B = "bbbbbbbb-0000-0000-0000-00000000001b";
+
+  it("autores: un miembro ve el email de los autores pedidos que tienen relevos en su org", async () => {
+    const rows = await runAs(owner, adminA, async (q) => (await q(AUTHORS, [ORG_A, [STAFF_A]])).rows);
+    expect(rows).toEqual([{ user_id: STAFF_A, email: "staff.alfa@example.test" }]);
+  });
+
+  it("autores: un miembro de la org que NO ha escrito relevos no aparece (no es un directorio)", async () => {
+    // supervisor y admin de alfa son miembros pero no autores en el fixture.
+    const rows = await runAs(owner, staffA, async (q) => (await q(AUTHORS, [ORG_A, [STAFF_A, SUPER_A, ADMIN_A]])).rows);
+    expect(rows.map((r) => r.user_id)).toEqual([STAFF_A]);
+  });
+
+  it("autores: un id no pedido no se devuelve aunque sea autor", async () => {
+    const rows = await runAs(owner, staffA, async (q) => (await q(AUTHORS, [ORG_A, [SUPER_A]])).rows);
+    expect(rows).toEqual([]);
+  });
+
+  it("autores: el autor de relevos de OTRA org no sale aunque se pida su id", async () => {
+    const rows = await runAs(owner, staffA, async (q) => (await q(AUTHORS, [ORG_A, [STAFF_B]])).rows);
+    expect(rows).toEqual([]);
+  });
+
+  it("autores: fuera de su org, sin membership o con la org suspendida, no ve nada", async () => {
+    const count = (actor: Actor, org: string, ids: string[]) =>
+      runAs(owner, actor, async (q) => (await q(AUTHORS, [org, ids])).rows.length);
+    expect(await count(staffB, ORG_A, [STAFF_A])).toBe(0);
+    expect(await count(staffA, ORG_B, [STAFF_B])).toBe(0);
+    expect(await count(outsider, ORG_A, [STAFF_A])).toBe(0);
+    expect(await count(adminC, ORG_C, ["cccccccc-0000-0000-0000-00000000001c"])).toBe(0);
+  });
+
+  it("autores: lista de ids vacía o nula no devuelve nada", async () => {
+    expect(await runAs(owner, staffA, async (q) => (await q(AUTHORS, [ORG_A, []])).rows.length)).toBe(0);
+    expect(await runAs(owner, staffA, async (q) => (await q(AUTHORS, [ORG_A, null])).rows.length)).toBe(0);
+  });
+
+  it("autores: anon no puede ejecutarla", async () => {
+    expect(await errorCodeAs(owner, ANON, AUTHORS, [ORG_A, [STAFF_A]])).toBe(RLS_VIOLATION);
+  });
+
+  it("el directorio completo de miembros (org_member_directory) ya no existe", async () => {
+    const r = await owner.query(`select count(*)::int as n from pg_proc where proname = 'org_member_directory'`);
+    expect(r.rows[0].n).toBe(0);
+  });
+
+  // ─── Catálogo: atributos de seguridad y ACL exacta ───
+  async function catalog(signature: string) {
+    const r = await owner.query(
+      `select p.prosecdef, p.proconfig,
+              coalesce(array(
+                select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end
+                  from aclexplode(p.proacl) a
+                 where a.privilege_type = 'EXECUTE' and a.grantee <> p.proowner
+                 order by 1
+              ), '{}') as executors
+         from pg_proc p
+        where p.oid = $1::regprocedure`,
+      [signature],
     );
-    expect(rows).toEqual([
-      { user_id: "aaaaaaaa-0000-0000-0000-00000000003a", email: "admin.alfa@example.test" },
-      { user_id: "aaaaaaaa-0000-0000-0000-00000000001a", email: "staff.alfa@example.test" },
-      { user_id: "aaaaaaaa-0000-0000-0000-00000000002a", email: "supervisor.alfa@example.test" },
-    ]);
+    return r.rows[0] as { prosecdef: boolean; proconfig: string[] | null; executors: string[] };
+  }
+
+  it("catálogo: handover_author_emails es security definer, search_path vacío y EXECUTE solo para authenticated", async () => {
+    const c = await catalog("public.handover_author_emails(uuid, uuid[])");
+    expect(c.prosecdef).toBe(true);
+    expect(c.proconfig).toEqual(['search_path=""']);
+    expect(c.executors).toEqual(["authenticated"]);
   });
 
-  it("directorio: fuera de su org, sin membership o con la org suspendida, no ve nada", async () => {
-    const count = (actor: Actor, org: string) =>
-      runAs(owner, actor, async (q) => (await q(`select * from public.org_member_directory($1)`, [org])).rows.length);
-    expect(await count(staffB, ORG_A)).toBe(0);
-    expect(await count(staffA, ORG_B)).toBe(0);
-    expect(await count(outsider, ORG_A)).toBe(0);
-    expect(await count(adminC, ORG_C)).toBe(0);
-  });
-
-  it("directorio: anon no puede ejecutarlo", async () => {
-    expect(await errorCodeAs(owner, ANON, `select * from public.org_member_directory($1)`, [ORG_A])).toBe(RLS_VIOLATION);
+  it("catálogo: purge_expired_handovers es security invoker, search_path vacío y EXECUTE solo para service_role", async () => {
+    const c = await catalog("public.purge_expired_handovers()");
+    expect(c.prosecdef).toBe(false);
+    expect(c.proconfig).toEqual(['search_path=""']);
+    expect(c.executors).toEqual(["service_role"]);
   });
 });

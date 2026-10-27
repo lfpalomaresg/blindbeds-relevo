@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { UNKNOWN_AUTHOR, fetchMemberDirectory, formatDateTime } from "@/lib/members";
+import { UNKNOWN_AUTHOR, fetchAuthorEmails, formatDateTime } from "@/lib/members";
 import type { HandoverItem, ShiftHandover } from "@/types";
 import { DEPARTMENTS, HANDOVER_BLOCKS, SHIFT_TYPES } from "@/types";
 
@@ -26,7 +26,7 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [{ data: h }, { data: its }, dir] = await Promise.all([
+      const [{ data: h }, { data: its }] = await Promise.all([
         supabase
           .from("shift_handovers")
           .select("id, org_id, department, shift_type, created_by, created_at")
@@ -39,10 +39,10 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
           .eq("handover_id", handoverId)
           .eq("org_id", orgId)
           .order("created_at", { ascending: true }),
-        fetchMemberDirectory(supabase, orgId),
       ]);
-      if (!active) return;
       const found = (h as ShiftHandover | null) ?? null;
+      const dir = found ? await fetchAuthorEmails(supabase, orgId, [found.created_by]) : new Map<string, string>();
+      if (!active) return;
       setHandover(found);
       setItems(found && its ? (its as HandoverItem[]) : []);
       if (found) setAuthor(dir.get(found.created_by) ?? UNKNOWN_AUTHOR);

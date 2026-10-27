@@ -30,7 +30,7 @@ const DIRECTORY = [
 function setup(options: ConstructorParameters<typeof FakeSupabase>[0] = {}) {
   state.fake = new FakeSupabase({
     tables: { shift_handovers: HANDOVERS },
-    rpcResults: { org_member_directory: { data: DIRECTORY, error: null } },
+    rpcResults: { handover_author_emails: { data: DIRECTORY, error: null } },
     ...options,
   });
   render(<HandoverList orgId={ORG} />);
@@ -51,7 +51,8 @@ describe("HandoverList", () => {
 
     const [query] = fake.callsTo("shift_handovers", "select");
     expect(query.filters).toEqual([["org_id", ORG]]);
-    expect(fake.rpcCalls).toEqual([{ fn: "org_member_directory", args: { p_org_id: ORG } }]);
+    // Solo se piden los emails de los autores de la lista visible (minimización).
+    expect(fake.rpcCalls[0]).toEqual({ fn: "handover_author_emails", args: { p_org_id: ORG, p_user_ids: [U1, U2, GONE] } });
   });
 
   it("si el autor ya no está en la organización lo dice en vez de enseñar un uuid", async () => {
@@ -77,13 +78,21 @@ describe("HandoverList", () => {
     expect(last.filters).toEqual(expect.arrayContaining([["org_id", ORG], ["department", "recepcion"]]));
   });
 
-  it("sin relevos muestra un estado vacío", async () => {
-    setup({ tables: { shift_handovers: [] } });
+  it("sin relevos muestra un estado vacío y no pide emails", async () => {
+    const fake = setup({ tables: { shift_handovers: [] } });
     await screen.findByText(/no hay relevos/i);
+    expect(fake.rpcCalls).toEqual([]);
+  });
+
+  it("al filtrar pide solo los autores del departamento visible", async () => {
+    const fake = setup();
+    await screen.findByRole("article", { name: /relevo pisos · tarde/i });
+    fireEvent.change(screen.getByLabelText(/departamento/i), { target: { value: "pisos" } });
+    await waitFor(() => expect(fake.rpcCalls.at(-1)?.args).toEqual({ p_org_id: ORG, p_user_ids: [U2] }));
   });
 
   it("si falla el directorio de autores, la lista se muestra igual", async () => {
-    setup({ rpcResults: { org_member_directory: { data: null, error: { message: "boom" } } } });
+    setup({ rpcResults: { handover_author_emails: { data: null, error: { message: "boom" } } } });
     const card = within(await screen.findByRole("article", { name: /relevo recepción · noche/i }));
     expect(card.getByText(/autor no disponible/i)).toBeTruthy();
   });

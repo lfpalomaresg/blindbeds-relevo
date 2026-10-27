@@ -180,8 +180,10 @@ selector: una cuenta (email) por hotel.
   los 50 últimos relevos del hotel con departamento, turno, autor (email) y
   hora; filtro por departamento. Al pulsar uno, `/handover/<id>` muestra sus
   bloques, también los ya resueltos (tachados, «Resuelto»).
-- El autor sale de `org_member_directory` (`000007`): solo emails de miembros
-  del mismo hotel. Si el autor ya no es miembro, se ve «Autor no disponible».
+- El autor sale de `handover_author_emails` (`000007`): solo los emails de los
+  autores de los relevos que se están viendo, y solo dentro del hotel del
+  usuario (no es un directorio de la plantilla). Si no se puede resolver, se ve
+  «Autor no disponible».
 
 ### Minimización del texto libre
 
@@ -313,6 +315,13 @@ ninguna notificación**. Mantenimiento lo ve cuando abre el panel.
 - La tarjeta muestra título, descripción, estado, prioridad, fecha y, si la
   tiene, la foto (URL firmada de 5 minutos, `src/components/tickets/TicketPhoto.tsx`;
   si Storage no la firma: «Foto no disponible»).
+- **Smoke pendiente (Supabase real, no simulable en local):** con un usuario
+  del hotel A, llamar a `createSignedUrl('ticket-photos', '<org_B>/<foto>.jpg', 300)`
+  debe fallar (Storage no firma objetos que las policies de `storage.objects`,
+  `000003`, no le dejan leer) y la tarjeta mostrar «Foto no disponible». Con un
+  usuario del hotel B la misma foto se ve. Hasta hacer ese smoke, el aislamiento
+  de la URL firmada entre hoteles está «no verificado» (las policies sí tienen
+  test con Postgres en `tests/db/storage.test.ts`).
 
 ### Lo que no existe todavía
 

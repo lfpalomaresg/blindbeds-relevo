@@ -26,7 +26,7 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
       "000004_org_scoped_fks.sql",
       "000005_change_ticket_status.sql",
       "000006_create_handover.sql",
-      "000007_org_member_directory.sql",
+      "000007_handover_author_emails.sql",
       "000008_handover_retention.sql",
     ]);
   });

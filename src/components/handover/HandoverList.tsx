@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { UNKNOWN_AUTHOR, fetchMemberDirectory, formatDateTime } from "@/lib/members";
+import { UNKNOWN_AUTHOR, fetchAuthorEmails, formatDateTime } from "@/lib/members";
 import type { Department, ShiftHandover } from "@/types";
 import { DEPARTMENTS, SHIFT_TYPES } from "@/types";
 
@@ -26,14 +26,6 @@ export function HandoverList({ orgId, limit = 50 }: HandoverListProps) {
 
   useEffect(() => {
     let active = true;
-    void fetchMemberDirectory(supabase, orgId).then((dir) => {
-      if (active) setAuthors(dir);
-    });
-    return () => { active = false; };
-  }, [orgId, supabase]);
-
-  useEffect(() => {
-    let active = true;
     void (async () => {
       let query = supabase
         .from("shift_handovers")
@@ -42,7 +34,12 @@ export function HandoverList({ orgId, limit = 50 }: HandoverListProps) {
       if (department !== "todos") query = query.eq("department", department);
       const { data } = await query.order("created_at", { ascending: false }).limit(limit);
       if (!active) return;
-      setHandovers(data ? (data as ShiftHandover[]) : []);
+      const list = data ? (data as ShiftHandover[]) : [];
+      // Solo los emails de los autores visibles (minimización).
+      const emails = await fetchAuthorEmails(supabase, orgId, list.map((h) => h.created_by));
+      if (!active) return;
+      setHandovers(list);
+      setAuthors(emails);
       setLoading(false);
     })();
     return () => { active = false; };

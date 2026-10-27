@@ -24,7 +24,7 @@ const ITEMS = [
 function setup(options: ConstructorParameters<typeof FakeSupabase>[0] = {}) {
   state.fake = new FakeSupabase({
     tables: { shift_handovers: [HANDOVER], handover_items: ITEMS },
-    rpcResults: { org_member_directory: { data: [{ user_id: U1, email: "staff.alfa@example.test" }], error: null } },
+    rpcResults: { handover_author_emails: { data: [{ user_id: U1, email: "staff.alfa@example.test" }], error: null } },
     ...options,
   });
   render(<HandoverDetail orgId={ORG} handoverId="h1" />);
@@ -46,6 +46,7 @@ describe("HandoverDetail", () => {
     expect(avisos.getByText(/resuelto/i)).toBeTruthy();
     expect(screen.queryByText("De otro relevo")).toBeNull();
 
+    expect(fake.rpcCalls).toEqual([{ fn: "handover_author_emails", args: { p_org_id: ORG, p_user_ids: [U1] } }]);
     const [h] = fake.callsTo("shift_handovers", "select");
     expect(h.filters).toEqual(expect.arrayContaining([["id", "h1"], ["org_id", ORG]]));
     const [i] = fake.callsTo("handover_items", "select");
