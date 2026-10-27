@@ -205,3 +205,9 @@ Suite después: 272 tests / 17 ficheros, lint 0, typecheck 0, `next build` OK.
 ### Decidido
 - Aplicar versiones de parche mínimas para las 11 alertas runtime, sin saltar a Next 16.4 ni actualizar dependencias ajenas.
 - La auditoría es el reproductor rojo/verde de dependencias; la regresión funcional se verifica en Linux y PostgreSQL real.
+
+## 2026-10-27 — Claude Code (Mac) · /goal MVP de la cartera
+
+- **Hecho:** definición MVP en `docs/MVP.md` (canónica en `AI_OS/PROJECTS/_mvp/`). Sprint 1 en la rama local `mvp/sprint1-2026-10-27` (2 commits, gate conclave pasado, sin push).
+- **Pendiente:** revisión del operador → merge → deploy. Backlog con IDs en `docs/MVP.md` §7.
+- **Decidido:** T1-T8 de la cartera (ICP hotel independiente 20-100 hab., precios, abogado ya, CRM Airtable).
