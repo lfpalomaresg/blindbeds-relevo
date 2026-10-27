@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { PendingItems } from "@/components/handover/PendingItems";
 import { TicketList } from "@/components/tickets/TicketList";
@@ -18,7 +19,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <a
+        <Link
           href="/handover/new"
           className="block p-6 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-orange-300 transition-colors"
         >
@@ -27,7 +28,7 @@ export default function DashboardPage() {
           </div>
           <h2 className="font-semibold text-gray-900">Relevo de turno</h2>
           <p className="text-sm text-gray-500 mt-1">Registra el traspaso de tu turno en 2 minutos</p>
-        </a>
+        </Link>
 
         <a
           href="/tickets/new"
@@ -42,7 +43,10 @@ export default function DashboardPage() {
       </div>
 
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Pendientes sin resolver</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">Pendientes sin resolver</h2>
+          <Link href="/handover" className="text-sm text-orange-600 hover:underline">Ver relevos</Link>
+        </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <PendingItems orgId={org.id} />
         </div>

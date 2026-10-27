@@ -21,7 +21,7 @@ src/
 ├── app/
 │   ├── login/          # Login con magic link
 │   ├── dashboard/      # Panel principal (pendientes + averías)
-│   ├── handover/new/   # Nuevo relevo de turno
+│   ├── handover/       # Lista de relevos · [id]/ detalle · new/ nuevo relevo
 │   ├── tickets/new/    # Nuevo parte de avería
 │   └── auth/           # callback + confirm de Supabase Auth
 ├── proxy.ts            # Auth: fallo cerrado sin sesión (Next 16, antes middleware)
@@ -37,7 +37,7 @@ src/
 ├── types/              # Tipos compartidos
 └── hooks/              # useAuth
 supabase/
-├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico · 000006 relevo atómico
+├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico · 000006 relevo atómico · 000007 directorio de autores · 000008 retención de relevos (90 días)
 └── variants/           # 000002: variante «proyecto compartido APPCC», NO aplicar
 tests/
 ├── db/                 # Matriz RLS sobre Postgres efímero (initdb + pg_ctl)
@@ -83,10 +83,10 @@ Postgres efímero local y comprueba las policies para staff / supervisor / admin
 ## Módulos
 
 ### Handover (FR-005)
-Formulario estructurado de 4 bloques (pendientes, VIPs, incidencias, avisos) que cada empleado rellena al terminar su turno. El relevo y sus items se guardan con la función `create_handover` en una sola transacción (migración 000006): si algo falla no queda un relevo a medias. Los items no resueltos persisten hasta que alguien los cierra.
+Formulario estructurado de 4 bloques (pendientes, VIPs, incidencias, avisos) que cada empleado rellena al terminar su turno. El relevo y sus items se guardan con la función `create_handover` en una sola transacción (migración 000006): si algo falla no queda un relevo a medias. Los items no resueltos persisten hasta que alguien los cierra. Lista de relevos (`/handover`) con departamento, turno, autor y hora, filtro por departamento, y detalle de cada relevo. Cada campo de texto libre avisa: «Sin nombres de huéspedes ni datos de salud: usa el nº de habitación.» Los relevos se borran a los 90 días con `purge_expired_handovers` (migración 000008; la programación con pg_cron está en el runbook y no se aplica sola).
 
 ### Averías (FR-006)
-Parte de avería con foto opcional, prioridad y estado (abierto → en curso → cerrado). Cada cambio de estado se hace con la función `change_ticket_status`, que actualiza el parte y registra la traza en `ticket_updates` (estado de origen y destino, quién) en una sola transacción (migración 000005): o se guardan ambos o ninguno. Aún no hay vista de historial ni por activo. QR escaneable por habitación/equipo; los activos y sus códigos QR se dan de alta por SQL (no hay UI de gestión).
+Parte de avería con foto opcional, prioridad y estado (abierto → en curso → cerrado). Cada cambio de estado se hace con la función `change_ticket_status`, que actualiza el parte y registra la traza en `ticket_updates` (estado de origen y destino, quién) en una sola transacción (migración 000005): o se guardan ambos o ninguno. Aún no hay vista de historial ni por activo. Foto visible en el parte con URL firmada de corta duración. Por defecto se ven los partes abiertos y en curso. QR escaneable por habitación/equipo, o código del activo escrito a mano si no hay cámara; los activos y sus códigos QR se dan de alta por SQL (no hay UI de gestión).
 
 ## Seguridad
 

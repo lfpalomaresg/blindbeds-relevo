@@ -1,11 +1,11 @@
 {
   "name": "Blindbeds Relevo",
   "short_name": "Relevo",
-  "description": "Suite de operaciones para hoteles",
+  "description": "Relevo de turno y partes de avería",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#f9fafb",
-  "theme_color": "#e8600a",
+  "theme_color": "#F0AB00",
   "icons": [
     {
       "src": "/icon-192.png",

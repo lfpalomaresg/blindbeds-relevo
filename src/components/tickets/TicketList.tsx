@@ -4,6 +4,16 @@ import { useState, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { MaintenanceTicket, TicketStatus } from "@/types";
 import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types";
+import { TicketPhoto } from "./TicketPhoto";
+
+/** Filtro por defecto: lo que aún requiere trabajo (abiertos + en curso). */
+type Filter = TicketStatus | "activos" | "todas";
+const ACTIVE_STATUSES: TicketStatus[] = ["abierto", "en_curso"];
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: "activos", label: "Abiertos y en curso" },
+  { value: "todas", label: "Todas" },
+  ...TICKET_STATUSES,
+];
 
 interface TicketListProps {
   orgId: string;
@@ -12,7 +22,7 @@ interface TicketListProps {
 export function TicketList({ orgId }: TicketListProps) {
   const supabase = useMemo(() => createBrowserClient(), []);
   const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
-  const [filter, setFilter] = useState<TicketStatus | "todas">("abierto");
+  const [filter, setFilter] = useState<Filter>("activos");
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState("");
@@ -25,7 +35,8 @@ export function TicketList({ orgId }: TicketListProps) {
         .select("*")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
-      if (filter !== "todas") query = query.eq("status", filter);
+      if (filter === "activos") query = query.in("status", ACTIVE_STATUSES);
+      else if (filter !== "todas") query = query.eq("status", filter);
       const { data } = await query;
       if (!active) return;
       setTickets(data ? (data as MaintenanceTicket[]) : []);
@@ -70,11 +81,11 @@ export function TicketList({ orgId }: TicketListProps) {
 
   return (
     <div className="space-y-4">
-      <div role="group" aria-label="Filtrar por estado" className="flex gap-2">
-        {[{ value: "todas", label: "Todas" }, ...TICKET_STATUSES].map((s) => (
+      <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap gap-2">
+        {FILTERS.map((s) => (
           <button
             key={s.value}
-            onClick={() => setFilter(s.value as TicketStatus | "todas")}
+            onClick={() => setFilter(s.value)}
             className={`px-3 py-1 text-sm rounded-full border ${
               filter === s.value
                 ? "bg-orange-600 text-white border-orange-600"
@@ -90,7 +101,9 @@ export function TicketList({ orgId }: TicketListProps) {
 
       {tickets.length === 0 && (
         <p className="text-gray-500 text-center py-8">
-          No hay partes{filter !== "todas" ? ` ${TICKET_STATUSES.find((s) => s.value === filter)?.label.toLowerCase()}s` : ""}.
+          {filter === "activos"
+            ? "No hay partes abiertos ni en curso."
+            : `No hay partes${filter !== "todas" ? ` ${TICKET_STATUSES.find((s) => s.value === filter)?.label.toLowerCase()}s` : ""}.`}
         </p>
       )}
 
@@ -109,6 +122,8 @@ export function TicketList({ orgId }: TicketListProps) {
               {TICKET_STATUSES.find((s) => s.value === ticket.status)?.label}
             </span>
           </div>
+
+          {ticket.photo_path && <TicketPhoto path={ticket.photo_path} />}
 
           <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
             <span className={`text-${getPriorityColor(ticket.priority)}-600 font-medium`}>

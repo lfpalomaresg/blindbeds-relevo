@@ -40,8 +40,16 @@ describe("textos de la UI frente al código", () => {
     expect(filesContaining(/notificad|notificamos|se notifica/i)).toEqual([]);
   });
 
-  it("el escáner no ofrece introducir el código a mano (no existe ese campo)", () => {
-    expect(filesContaining(/introducir código|código manualmente/i)).toEqual([]);
+  it("el parte ofrece el código de activo manual como alternativa al escáner (D7 b)", () => {
+    expect(read("src/components/tickets/TicketForm.tsx")).toMatch(/Código del activo/);
+  });
+
+  it("el panel enlaza a la lista de relevos", () => {
+    expect(read("src/app/dashboard/page.tsx")).toMatch(/href="\/handover"/);
+  });
+
+  it("el aviso de minimización es literal y vive en un solo sitio", () => {
+    expect(filesContaining(/Sin nombres de huéspedes ni datos de salud: usa el nº de habitación\./)).toEqual(["src/lib/privacy.ts"]);
   });
 
   it("el escáner no afirma que el acceso fue denegado cuando el fallo puede ser otro", () => {

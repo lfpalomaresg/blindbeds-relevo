@@ -30,10 +30,11 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [manualCode, setManualCode] = useState("");
 
-  // El QR lleva el texto de ticket_assets.qr_code; el parte necesita el id (uuid).
-  async function handleQRScan(code: string) {
-    setScanning(false);
+  // El QR (o el código impreso bajo él) es el texto de ticket_assets.qr_code;
+  // el parte necesita el id (uuid). Se busca solo dentro de la organización.
+  async function lookupAsset(code: string, notFoundMessage: string) {
     setError("");
     const { data, error: lookupError } = await supabase
       .from("ticket_assets")
@@ -44,10 +45,25 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
 
     if (lookupError || !data) {
       setAsset(null);
-      setError("Activo no reconocido. Vuelve a escanear el QR o crea el parte sin activo.");
+      setError(notFoundMessage);
       return;
     }
     setAsset({ id: data.id as string, name: data.name as string });
+    setManualCode("");
+  }
+
+  async function handleQRScan(code: string) {
+    setScanning(false);
+    await lookupAsset(code, "Activo no reconocido. Vuelve a escanear el QR o crea el parte sin activo.");
+  }
+
+  async function handleManualCode() {
+    const code = manualCode.trim();
+    if (!code) {
+      setError("Escribe el código del activo (está impreso bajo el QR).");
+      return;
+    }
+    await lookupAsset(code, "Código no encontrado. Revísalo o crea el parte sin activo.");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -167,6 +183,38 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
           >
             <span>📷</span> Escanear QR del activo
           </button>
+        )}
+
+        {!asset && (
+          <div>
+            <label htmlFor="ticket-asset-code" className="block text-sm font-medium text-gray-700 mb-1">
+              Código del activo <span className="text-gray-400 font-normal">— si no puedes escanear</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="ticket-asset-code"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleManualCode();
+                  }
+                }}
+                maxLength={100}
+                autoCapitalize="characters"
+                placeholder="Código impreso bajo el QR"
+                className="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+              <button
+                type="button"
+                onClick={() => void handleManualCode()}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:border-orange-400 hover:text-orange-600"
+              >
+                Buscar activo
+              </button>
+            </div>
+          </div>
         )}
 
         <div>

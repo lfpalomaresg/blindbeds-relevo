@@ -96,7 +96,7 @@ export const SHIFT_TYPES: { value: ShiftType; label: string }[] = [
 
 export const HANDOVER_BLOCKS: { value: HandoverBlock; label: string; description: string }[] = [
   { value: "pendientes", label: "Pendientes", description: "Tareas sin terminar del turno anterior" },
-  { value: "vips", label: "VIPs", description: "Clientes especiales hoy" },
+  { value: "vips", label: "VIPs", description: "Habitaciones con atención especial hoy" },
   { value: "incidencias", label: "Incidencias", description: "Problemas activos" },
   { value: "avisos", label: "Avisos", description: "Información general para el siguiente turno" },
 ];

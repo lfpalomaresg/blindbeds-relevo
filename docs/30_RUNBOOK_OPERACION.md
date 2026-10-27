@@ -22,6 +22,8 @@ Cada comportamiento se apoya en el código tal y como está en `main`
 |---|---|---|---|
 | Acceso por enlace mágico | `/login` | cualquiera | `src/components/auth/LoginForm.tsx:18-21` |
 | Panel: pendientes + partes | `/dashboard` | miembro de una org activa | `src/app/dashboard/page.tsx:44-56` |
+| Relevos (lista, filtro por departamento) | `/handover` | miembro | `src/components/handover/HandoverList.tsx` |
+| Detalle de un relevo | `/handover/<id>` | miembro | `src/components/handover/HandoverDetail.tsx` |
 | Nuevo relevo | `/handover/new` | miembro | `src/components/handover/HandoverForm.tsx` |
 | Nuevo parte de avería | `/tickets/new` | miembro | `src/components/tickets/TicketForm.tsx` |
 
@@ -29,7 +31,8 @@ Todas las rutas salvo login, callbacks de auth, `manifest.json`, `sw.js` e
 iconos exigen sesión (`src/lib/auth-paths.ts:7-16`, `src/proxy.ts:11-50`).
 
 **No existe todavía** ninguna pantalla de administración: ni usuarios, ni
-roles, ni activos, ni histórico de relevos, ni detalle de un parte.
+roles, ni activos, ni detalle de un parte. Los relevos sí tienen lista y detalle
+(`/handover`, `/handover/<id>`) desde el sprint 2 (27/10/2026).
 
 ---
 
@@ -173,11 +176,52 @@ selector: una cuenta (email) por hotel.
 - Botón «Resolver» en cada uno: lo marca resuelto con autor y hora
   (`PendingItems.tsx:33-43`). Desaparece para todos.
 
+- En `/handover` (enlace «Ver relevos» del panel y «Relevos» de la cabecera):
+  los 50 últimos relevos del hotel con departamento, turno, autor (email) y
+  hora; filtro por departamento. Al pulsar uno, `/handover/<id>` muestra sus
+  bloques, también los ya resueltos (tachados, «Resuelto»).
+- El autor sale de `org_member_directory` (`000007`): solo emails de miembros
+  del mismo hotel. Si el autor ya no es miembro, se ve «Autor no disponible».
+
+### Minimización del texto libre
+
+Cada bloque del relevo lleva el aviso «Sin nombres de huéspedes ni datos de
+salud: usa el nº de habitación.» (`src/lib/privacy.ts`). Es un aviso, no un
+filtro: la app no detecta nombres. Si se cuela un dato sensible, el admin pide
+al operador que borre ese bloque concreto por SQL (acotado por `id` y
+`org_id`, igual que «Borrar un relevo huérfano»).
+
+### Retención de relevos (90 días)
+
+`public.purge_expired_handovers()` (`000008_handover_retention.sql`) borra los
+relevos con más de 90 días de **todos** los hoteles del proyecto y, por
+cascada, sus bloques (resueltos o no). Devuelve cuántos relevos borró. Solo la
+pueden ejecutar el operador (SQL Editor), `service_role` o `pg_cron`; los
+usuarios de la app no.
+
+**La migración no programa nada.** Para activarla en un proyecto Supabase
+(una vez, con OK del operador y tras avisar al hotel del plazo):
+
+1. Dashboard → Database → Extensions → activar `pg_cron`.
+2. SQL Editor:
+
+   ```sql
+   -- Todos los días a las 03:15 UTC.
+   select cron.schedule(
+     'relevo-purge-expired-handovers',
+     '15 3 * * *',
+     $$select public.purge_expired_handovers()$$
+   );
+   ```
+
+3. Comprobar: `select jobname, schedule, active from cron.job;` y, al día
+   siguiente, `select status, return_message, end_time from cron.job_run_details order by end_time desc limit 5;`.
+4. Para pararla: `select cron.unschedule('relevo-purge-expired-handovers');`.
+
+Ejecución manual puntual: `select public.purge_expired_handovers();`.
+
 ### Lo que no existe todavía
 
-- Histórico de relevos ni lectura de un relevo completo: solo se ven los
-  bloques **no resueltos**. Lo resuelto no se puede consultar desde la app
-  (sí por SQL en `handover_items` con `resolved = true`).
 - «Leído por»: las columnas `read_by`/`read_at` existen
   (`000001_baseline.sql:67-68`) pero ningún código las escribe y no hay
   política `update` sobre `shift_handovers`.
@@ -240,6 +284,9 @@ reportó el fallo (columnas de `shift_handovers`, `000001_baseline.sql:61-70`).
 2. Opcional: «Escanear QR del activo». Se busca el texto del QR en
    `ticket_assets.qr_code` del hotel (`TicketForm.tsx:35-51`). Si no existe:
    «Activo no reconocido. Vuelve a escanear el QR o crea el parte sin activo.»
+   Si no hay cámara o el QR está dañado: campo «Código del activo» + «Buscar
+   activo», que busca el mismo texto (`qr_code`) en el hotel. Si no existe:
+   «Código no encontrado. Revísalo o crea el parte sin activo.»
 3. Título (obligatorio, ≤120), descripción (≤2000), prioridad Crítica / Alta /
    Normal / Baja, por defecto Normal (`validation.ts:109-137`,
    `TicketForm.tsx:26`).
@@ -258,18 +305,18 @@ ninguna notificación**. Mantenimiento lo ve cuando abre el panel.
 
 ### Seguimiento de partes (técnico)
 
-- Panel → «Partes de avería activos»: filtro por estado, por defecto
-  «Abierto» (`src/components/tickets/TicketList.tsx:15`, `:70-84`).
+- Panel → «Partes de avería»: filtro por estado, por defecto «Abiertos y en
+  curso» (`src/components/tickets/TicketList.tsx`).
 - Botones «En curso» (solo si está abierto) y «Cerrar»
   (`TicketList.tsx:116-135`). Cerrar guarda quién y cuándo y deja traza en
   `ticket_updates` (`TicketList.tsx:36-56`).
-- La tarjeta muestra título, descripción, estado, prioridad y fecha
-  (`TicketList.tsx:92-114`).
+- La tarjeta muestra título, descripción, estado, prioridad, fecha y, si la
+  tiene, la foto (URL firmada de 5 minutos, `src/components/tickets/TicketPhoto.tsx`;
+  si Storage no la firma: «Foto no disponible»).
 
 ### Lo que no existe todavía
 
-- **Ver la foto** de un parte: `photo_path` se guarda (`TicketForm.tsx:101`)
-  pero ningún componente la muestra. Tampoco se muestra el activo.
+- Mostrar el activo en la tarjeta del parte.
 - Asignar un parte a un técnico: la columna `assigned_to` existe
   (`000001_baseline.sql:114`) y nadie la usa.
 - Comentarios: `ticket_updates.comment` existe (`000001_baseline.sql:128`) sin

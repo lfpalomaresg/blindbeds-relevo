@@ -1,10 +1,11 @@
+import Link from "next/link";
 import type { Metadata, Viewport } from "next";
 import { ServiceWorker } from "@/components/ServiceWorker";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Blindbeds Relevo",
-  description: "Suite de operaciones para hoteles: handover de turno y partes de avería",
+  description: "Relevo de turno y partes de avería para hoteles",
   manifest: "/manifest.json",
 };
 
@@ -12,7 +13,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#e8600a",
+  themeColor: "#F0AB00",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </a>
             <nav className="flex gap-4 text-sm">
               <a href="/dashboard" className="text-gray-600 hover:text-orange-600">Inicio</a>
-              <a href="/handover/new" className="text-gray-600 hover:text-orange-600">Relevo</a>
+              <Link href="/handover" className="text-gray-600 hover:text-orange-600">Relevos</Link>
               <a href="/tickets/new" className="text-gray-600 hover:text-orange-600">Avería</a>
             </nav>
           </div>

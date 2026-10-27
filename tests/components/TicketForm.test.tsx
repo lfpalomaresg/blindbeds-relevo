@@ -183,4 +183,39 @@ describe("TicketForm", () => {
     submit();
     await screen.findByText(/row-level security/i);
   });
+
+  it("sin escáner: el código manual busca el activo por código en la organización y envía su id", async () => {
+    const fake = setup();
+    type(/código del activo/i, "  TEST-ALFA-101 ");
+    fireEvent.click(screen.getByRole("button", { name: /buscar activo/i }));
+    await screen.findByText(/Habitación 101/);
+    const lookup = fake.callsTo("ticket_assets", "select")[0];
+    expect(lookup.filters).toEqual(expect.arrayContaining([["org_id", ORG], ["qr_code", "TEST-ALFA-101"]]));
+
+    type(/título/i, "Grifo gotea");
+    submit();
+    await screen.findByText(/parte de avería creado/i);
+    const [insert] = fake.callsTo("maintenance_tickets", "insert");
+    expect((insert.payload as { asset_id: string }).asset_id).toBe(ASSET_ID);
+  });
+
+  it("un código manual que no existe en la organización se rechaza y no fija activo", async () => {
+    const fake = setup();
+    type(/código del activo/i, "NO-EXISTE");
+    fireEvent.click(screen.getByRole("button", { name: /buscar activo/i }));
+    await screen.findByText(/código no encontrado/i);
+    type(/título/i, "Grifo gotea");
+    submit();
+    await screen.findByText(/parte de avería creado/i);
+    const [insert] = fake.callsTo("maintenance_tickets", "insert");
+    expect((insert.payload as { asset_id: unknown }).asset_id).toBeNull();
+  });
+
+  it("un código manual vacío no consulta la base de datos", async () => {
+    const fake = setup();
+    type(/código del activo/i, "   ");
+    fireEvent.click(screen.getByRole("button", { name: /buscar activo/i }));
+    await screen.findByText(/escribe el código/i);
+    expect(fake.callsTo("ticket_assets", "select")).toHaveLength(0);
+  });
 });

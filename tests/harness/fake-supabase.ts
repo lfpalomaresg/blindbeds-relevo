@@ -30,6 +30,8 @@ export interface FakeSupabaseOptions {
   insertErrors?: Record<string, { message: string }>;
   updateErrors?: Record<string, { message: string }>;
   uploadError?: { message: string } | null;
+  /** Error a devolver en createSignedUrl. */
+  signedUrlError?: { message: string } | null;
   /** Resultado de supabase.rpc(nombre) por función. Por defecto { data: true, error: null }. */
   rpcResults?: Record<string, { data: unknown; error: { message: string } | null }>;
 }
@@ -58,6 +60,8 @@ class QueryBuilder implements PromiseLike<Result> {
   update(payload: unknown) { this.op = "update"; this.payload = payload; return this; }
   delete() { this.op = "delete"; return this; }
   eq(col: string, val: unknown) { this.filters.push([col, val]); return this; }
+  /** `in(col, valores)`: se registra como filtro `[col, { in: valores }]`. */
+  in(col: string, vals: unknown[]) { this.filters.push([col, { in: vals }]); return this; }
   order() { return this; }
   limit() { return this; }
   maybeSingle() { this.wantSingle = true; return this; }
@@ -74,7 +78,11 @@ class QueryBuilder implements PromiseLike<Result> {
       return { data: this.wantSingle ? withIds[0] : withIds, error: null };
     }
     const rows = (this.fake.options.tables?.[this.table] ?? []).filter((row) =>
-      this.filters.every(([col, val]) => row[col] === val),
+      this.filters.every(([col, val]) =>
+        val && typeof val === "object" && "in" in (val as object)
+          ? ((val as { in: unknown[] }).in).includes(row[col])
+          : row[col] === val,
+      ),
     );
     if (this.op === "update" || this.op === "delete") {
       const err = this.fake.options.updateErrors?.[this.table] ?? null;
@@ -98,9 +106,16 @@ class QueryBuilder implements PromiseLike<Result> {
   }
 }
 
+export interface SignedUrlCall {
+  bucket: string;
+  path: string;
+  expiresIn: number;
+}
+
 export class FakeSupabase {
   calls: RecordedCall[] = [];
   uploads: UploadCall[] = [];
+  signedUrls: SignedUrlCall[] = [];
 
   constructor(public options: FakeSupabaseOptions = {}) {}
 
@@ -128,6 +143,14 @@ export class FakeSupabase {
         this.uploads.push({ bucket, path, file, options });
         const error = this.options.uploadError ?? null;
         return { data: error ? null : { path }, error };
+      },
+      createSignedUrl: async (path: string, expiresIn: number) => {
+        this.signedUrls.push({ bucket, path, expiresIn });
+        const error = this.options.signedUrlError ?? null;
+        return {
+          data: error ? null : { signedUrl: `https://storage.test/${bucket}/${path}?token=t&expires=${expiresIn}` },
+          error,
+        };
       },
     }),
   };

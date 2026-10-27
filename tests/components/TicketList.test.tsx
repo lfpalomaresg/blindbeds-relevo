@@ -10,6 +10,7 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 import { TicketList } from "@/components/tickets/TicketList";
+import { PHOTO_URL_TTL_SECONDS } from "@/lib/photos";
 
 const ORG = "00000000-0000-0000-0000-00000000000a";
 const TICKETS = [
@@ -27,13 +28,21 @@ function setup(options: ConstructorParameters<typeof FakeSupabase>[0] = {}) {
 afterEach(cleanup);
 
 describe("TicketList", () => {
-  it("por defecto muestra solo los partes abiertos de la organización", async () => {
+  it("por defecto muestra los partes abiertos Y en curso de la organización (no los cerrados)", async () => {
     const fake = setup();
     await screen.findByText("Grifo gotea");
-    expect(screen.queryByText("Luz fundida")).toBeNull();
+    expect(screen.getByText("Luz fundida")).toBeTruthy();
     expect(screen.queryByText("Ascensor")).toBeNull();
     const [query] = fake.callsTo("maintenance_tickets", "select");
-    expect(query.filters).toEqual(expect.arrayContaining([["org_id", ORG], ["status", "abierto"]]));
+    expect(query.filters).toEqual(expect.arrayContaining([["org_id", ORG], ["status", { in: ["abierto", "en_curso"] }]]));
+  });
+
+  it("el filtro «Abierto» sigue mostrando solo los abiertos", async () => {
+    setup();
+    await screen.findByText("Luz fundida");
+    fireEvent.click(within(screen.getByRole("group", { name: /filtrar por estado/i })).getByRole("button", { name: /^abierto$/i }));
+    await waitFor(() => expect(screen.queryByText("Luz fundida")).toBeNull());
+    expect(screen.getByText("Grifo gotea")).toBeTruthy();
   });
 
   it("el filtro «Todas» quita el filtro de estado y muestra todos", async () => {
@@ -46,7 +55,7 @@ describe("TicketList", () => {
 
   it("muestra el estado vacío con el nombre del filtro", async () => {
     setup({ tables: { maintenance_tickets: [] } });
-    await screen.findByText(/no hay partes abiertos/i);
+    await screen.findByText(/no hay partes abiertos ni en curso/i);
   });
 
   // El cambio de estado y su traza en ticket_updates los hace la función
@@ -121,5 +130,31 @@ describe("TicketList", () => {
     fireEvent.click(within(screen.getByRole("group", { name: /filtrar por estado/i })).getByRole("button", { name: /^cerrado$/i }));
     const card = within(await screen.findByRole("article", { name: "Ascensor" }));
     expect(card.queryByRole("button")).toBeNull();
+  });
+
+  it("un parte con foto la muestra con una URL firmada de caducidad corta del bucket privado", async () => {
+    const withPhoto = [{ ...TICKETS[0], photo_path: `${ORG}/foto-1.jpg` }];
+    const fake = setup({ tables: { maintenance_tickets: withPhoto } });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    const img = (await card.findByRole("img", { name: /foto del parte/i })) as HTMLImageElement;
+    expect(img.src).toContain(`https://storage.test/ticket-photos/${ORG}/foto-1.jpg`);
+    expect(fake.signedUrls).toEqual([{ bucket: "ticket-photos", path: `${ORG}/foto-1.jpg`, expiresIn: PHOTO_URL_TTL_SECONDS }]);
+    expect(PHOTO_URL_TTL_SECONDS).toBeGreaterThan(0);
+    expect(PHOTO_URL_TTL_SECONDS).toBeLessThanOrEqual(600);
+  });
+
+  it("un parte sin foto no pide URL firmada ni pinta imagen", async () => {
+    const fake = setup();
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    expect(card.queryByRole("img")).toBeNull();
+    expect(fake.signedUrls).toHaveLength(0);
+  });
+
+  it("si Storage niega la URL (otra org, objeto borrado) lo dice y no rompe la lista", async () => {
+    const withPhoto = [{ ...TICKETS[0], photo_path: `${ORG}/foto-1.jpg` }];
+    setup({ tables: { maintenance_tickets: withPhoto }, signedUrlError: { message: "Object not found" } });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    await card.findByText(/foto no disponible/i);
+    expect(card.queryByRole("img")).toBeNull();
   });
 });

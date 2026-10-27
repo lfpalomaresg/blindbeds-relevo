@@ -4,6 +4,34 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-10-27 — Sprint 2 del MVP (R3, R4b, R4c, minimización, R5)
+
+**Hecho** · Rama local `mvp/sprint2-2026-10-27` (sin push). R3: `/handover`
+(últimos 50 relevos con departamento, turno, autor y hora; filtro por
+departamento) y `/handover/[id]` (ítems por bloque, resueltos tachados); enlace
+«Ver relevos» en el panel y «Relevos» en la cabecera. Autor vía
+`org_member_directory` (000007, security definer acotado a las orgs del
+usuario). R4b: foto del parte con URL firmada de 300 s (`TicketPhoto`); la lista
+de partes arranca en «Abiertos y en curso». R4c: «Código del activo» manual
+que busca `ticket_assets.qr_code` en la org. Minimización: aviso literal en los
+4 bloques del relevo (`src/lib/privacy.ts`, `aria-describedby`); el bloque VIPs
+pasa a «Habitaciones con atención especial hoy». Retención:
+`purge_expired_handovers()` (000008) borra relevos > 90 días con sus ítems;
+solo operador/service_role/pg_cron; pg_cron documentado en el runbook, NO
+aplicado. R5: iconos 192/512 (#F0AB00 + «R» #97999B) generados con
+`scripts/generate-icons.py` (solo stdlib); manifest con `theme_color` de marca y
+sin «Suite». Tests rojo→verde: 18 fallos → 571 verdes; tsc, lint y build
+(con env públicas de relleno) en verde.
+**Pendiente** · Smoke en Supabase real (URL firmada y 403 entre orgs, pg_cron);
+Lighthouse «installable»; borrado manual de un ítem por el admin desde la app y
+procedimiento de incidente (MUST de minimización, parte M); careo antes de
+fusionar (toca security definer).
+**Decidido** · El autor se muestra por email (no hay perfiles); un autor dado
+de baja sale como «Autor no disponible». La retención no tiene parámetro (90
+días fijos) para que nadie la llame con un plazo menor por error.
+
+---
+
 ## 2026-10-15 — Runbook de operación y guion de prueba (encargo f5-relevo-docs)
 
 **Hecho** · Solo documentación, sin tocar código.

@@ -134,4 +134,16 @@ describe("HandoverForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /nuevo relevo/i }));
     await waitFor(() => expect((screen.getByLabelText(/^vips/i) as HTMLTextAreaElement).value).toBe(""));
   });
+
+  it("cada campo de texto libre lleva el aviso de minimización asociado (aria-describedby)", () => {
+    setup();
+    const notice = /Sin nombres de huéspedes ni datos de salud: usa el nº de habitación\./;
+    expect(screen.getAllByText(notice)).toHaveLength(4);
+    for (const label of [/^pendientes/i, /^vips/i, /^incidencias/i, /^avisos/i]) {
+      const field = screen.getByLabelText(label);
+      const ids = (field.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean);
+      expect(ids.length).toBeGreaterThan(0);
+      expect(ids.map((id) => document.getElementById(id)?.textContent ?? "").join(" ")).toMatch(notice);
+    }
+  });
 });

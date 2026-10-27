@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { LIMITS, validateHandoverInput } from "@/lib/validation";
+import { FREE_TEXT_NOTICE } from "@/lib/privacy";
 import type { HandoverItem, HandoverBlock, Department, ShiftType } from "@/types";
 import { DEPARTMENTS, SHIFT_TYPES, HANDOVER_BLOCKS } from "@/types";
 
@@ -171,9 +172,13 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
             onChange={(e) => updateBlock(block.value, e.target.value)}
             rows={3}
             maxLength={LIMITS.handoverContent}
+            aria-describedby={`handover-block-${block.value}-notice`}
             placeholder={`Escribe aquí ${block.description.toLowerCase()}...`}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
           />
+          <p id={`handover-block-${block.value}-notice`} className="text-xs text-amber-700 mt-1">
+            {FREE_TEXT_NOTICE}
+          </p>
         </div>
       ))}
 
