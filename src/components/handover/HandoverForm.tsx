@@ -66,33 +66,17 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
       return;
     }
 
-    const { data: handover, error: hError } = await supabase
-      .from("shift_handovers")
-      .insert({
-        org_id: orgId,
-        department: validated.value.department,
-        shift_type: validated.value.shiftType,
-        created_by: userData.user.id,
-      })
-      .select("id")
-      .single();
+    // Cabecera + items en una sola transacción (migración 000006): si algo
+    // falla no queda un relevo a medias. RLS aplica (security invoker).
+    const { error: rpcError } = await supabase.rpc("create_handover", {
+      p_org_id: orgId,
+      p_department: validated.value.department,
+      p_shift_type: validated.value.shiftType,
+      p_items: validated.value.items.map((item) => ({ block: item.block, content: item.content })),
+    });
 
-    if (hError || !handover) {
-      setError(hError?.message || "Error al crear el handover");
-      setSaving(false);
-      return;
-    }
-
-    const itemRows = validated.value.items.map((item) => ({
-      handover_id: handover.id as string,
-      org_id: orgId,
-      block: item.block,
-      content: item.content,
-    }));
-
-    const { error: iError } = await supabase.from("handover_items").insert(itemRows);
-    if (iError) {
-      setError(iError.message);
+    if (rpcError) {
+      setError(rpcError.message || "Error al crear el relevo");
       setSaving(false);
       return;
     }

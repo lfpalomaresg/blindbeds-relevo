@@ -79,9 +79,10 @@ sale con 1 en vez de decir «Setup completo».
 | `000003_storage_policies.sql` | Policies de `storage.objects` para `ticket-photos`. |
 | `000004_org_scoped_fks.sql` | `unique (id, org_id)` + FK compuestas anti-cruce de organizaciones; añade `ticket_updates.org_id`. |
 | `000005_change_ticket_status.sql` | Función `change_ticket_status`: estado + traza en `ticket_updates` en una sola transacción (`security invoker`). |
+| `000006_create_handover.sql` | Función `create_handover`: cabecera del relevo + items en una sola transacción (`security invoker`). |
 
 No existe `000002` en esta carpeta a propósito (es la variante de abajo).
-`000003`, `000004` y `000005` son idempotentes: se pueden volver a aplicar.
+`000003`, `000004`, `000005` y `000006` son idempotentes: se pueden volver a aplicar.
 
 **No aplicar** `supabase/variants/shared-appcc/000002_relevo_tables.sql`. Es la
 variante para alojar Relevo dentro del proyecto de APPCC; duplica el baseline y

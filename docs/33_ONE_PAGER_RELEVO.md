@@ -103,13 +103,13 @@ hotel. **Reserva tu demo:** [VERIFICAR contacto: email / teléfono / enlace de a
 | Basta con un apartado relleno | ✅ Existe | `src/lib/validation.ts` (`validateHandoverInput`) |
 | Pendientes sin resolver persisten y se marcan como resueltos (quién y cuándo) | ✅ Existe | `src/components/handover/PendingItems.tsx` |
 | Parte con título, descripción, 4 prioridades | ✅ Existe | `src/components/tickets/TicketForm.tsx` |
-| Foto desde el móvil (JPEG/PNG/WebP ≤ 10 MB) | ⚠️ Existe la subida, pero **la foto es opcional** en código y **no se muestra en el listado** de partes. Además, faltan las policies de `storage.objects` (runbook §«Pendiente conocido» 1): en un Supabase real la subida fallaría hasta aplicarlas | `TicketForm.tsx`, `TicketList.tsx`, `docs/20_ACTIVACION_SUPABASE.md` |
+| Foto desde el móvil (JPEG/PNG/WebP ≤ 10 MB) | ⚠️ Existe la subida, pero **la foto es opcional** en código y **no se muestra en el listado** de partes. Las policies de `storage.objects` existen (`000003_storage_policies.sql`) y están probadas contra un stub de Storage (`tests/db/storage.test.ts`); falta la verificación en un Supabase real (runbook §6 «Fotos») | `TicketForm.tsx`, `TicketList.tsx`, `docs/20_ACTIVACION_SUPABASE.md` |
 | QR del activo asocia el parte | ✅ Existe el escaneo. ⚠️ No hay pantalla para dar de alta activos ni generar QR: se hace por SQL | `QRScanner.tsx`, `TicketForm.tsx` |
 | Estados abierto → en curso → cerrado, con registro | ✅ Existe (se guarda en `ticket_updates`; no hay pantalla para ver ese historial) | `TicketList.tsx` |
 | Entrada con enlace por email, sin contraseña | ✅ Existe | `src/components/auth/LoginForm.tsx` |
 | Se instala como app (PWA) | ⚠️ Manifest y service worker existen, pero **faltan los iconos** `icon-192.png` / `icon-512.png` en `public/` | `public/manifest.json`, `public/sw.js` |
 | Separación por hotel (tablas) | ✅ RLS probado (`tests/db/rls.test.ts`) | README §Seguridad |
-| Fotos privadas por hotel | ⚠️ Retirado del texto comercial. El bucket `ticket-photos` existe, pero sin policies en `storage.objects` no hay aislamiento por `org_id` demostrado (y la subida fallaría); el harness no modela Storage, así que el RLS en verde no lo prueba | `supabase/migrations/000001_baseline.sql`, `docs/20_ACTIVACION_SUPABASE.md` §«Pendiente conocido» 1 |
+| Fotos privadas por hotel | ⚠️ Retirado del texto comercial. El bucket `ticket-photos` y sus policies por `org_id` existen (`000003_storage_policies.sql`) y pasan en `tests/db/storage.test.ts` contra un stub de Storage, no contra Supabase: falta la prueba en un Supabase real antes de volver a prometerlo | `supabase/migrations/000003_storage_policies.sql`, `docs/20_ACTIVACION_SUPABASE.md` §6 «Fotos» |
 | Relevo y partes en la misma app | ✅ Existe como dos formularios independientes. ⚠️ **No** hay forma de crear o vincular un parte desde un relevo (`maintenance_tickets` no tiene referencia a `handovers`) | `src/components/handover/`, `src/components/tickets/`, `supabase/migrations/000001_baseline.sql` |
 | Alta de hotel y usuarios «la hacemos nosotros» | ✅ Coherente: no hay UI de alta, se hace por SQL (runbook §4) | `docs/20_ACTIVACION_SUPABASE.md` |
 
@@ -131,9 +131,10 @@ necesita red) · integración con PMS · varios idiomas · marcar un relevo como
 - El README dice que la foto es «obligatoria»; el código la deja opcional. Este
   one-pager no dice ni una cosa ni la otra.
 - **Foto en el parte — decisión del operador.** Hoy el texto comercial la presenta como
-  «Próximamente». Opciones: (a) dejarla así hasta aplicar y probar las policies de
-  `storage.objects`; (b) aplicar antes las policies (encargo de código aparte) y
-  volver a prometer la foto y el almacenamiento privado; (c) quitar toda mención a la
+  «Próximamente». Las policies de `storage.objects` ya están en la migración `000003` y probadas
+  contra un stub. Opciones: (a) dejarla así hasta probarlas en un Supabase real;
+  (b) hacer esa prueba (runbook §6) y volver a prometer la foto y el almacenamiento
+  privado; (c) quitar toda mención a la
   foto. Recomendación: **(a)** ahora y pasar a (b) cuando haya prueba en un Supabase
   real.
 - Comparativa: hecha por categorías, sin nombres de proveedores. Datos de origen en la

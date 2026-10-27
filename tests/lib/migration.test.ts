@@ -25,6 +25,7 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
       "000003_storage_policies.sql",
       "000004_org_scoped_fks.sql",
       "000005_change_ticket_status.sql",
+      "000006_create_handover.sql",
     ]);
   });
 });
@@ -43,6 +44,23 @@ describe("migration 000005_change_ticket_status — cambio de estado atómico", 
   it("solo authenticated puede ejecutarla", () => {
     expect(sql).toMatch(/revoke execute on function public\.change_ticket_status\(uuid, text, text\) from public, anon/);
     expect(sql).toMatch(/grant execute on function public\.change_ticket_status\(uuid, text, text\) to authenticated/);
+  });
+});
+
+describe("migration 000006_create_handover — relevo atómico", () => {
+  let sql: string;
+  beforeAll(() => {
+    sql = readFileSync(`${MIGRATION_DIR}/000006_create_handover.sql`, "utf-8").toLowerCase();
+  });
+
+  it("se ejecuta con los permisos del usuario (RLS sigue aplicando), no como definer", () => {
+    expect(sql).toContain("security invoker");
+    expect(sql).not.toContain("security definer");
+  });
+
+  it("solo authenticated puede ejecutarla", () => {
+    expect(sql).toMatch(/revoke execute on function public\.create_handover\(uuid, text, text, jsonb\) from public, anon/);
+    expect(sql).toMatch(/grant execute on function public\.create_handover\(uuid, text, text, jsonb\) to authenticated/);
   });
 });
 

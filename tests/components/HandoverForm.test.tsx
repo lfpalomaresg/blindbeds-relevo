@@ -65,6 +65,7 @@ describe("HandoverForm", () => {
     await screen.findByText(/al menos un bloque/i);
     expect(fake.callsTo("shift_handovers", "insert")).toHaveLength(0);
     expect(fake.callsTo("handover_items", "insert")).toHaveLength(0);
+    expect(fake.rpcCalls).toHaveLength(0);
   });
 
   it("falla cerrado sin sesión: error visible y ningún insert", async () => {
@@ -73,9 +74,10 @@ describe("HandoverForm", () => {
     submit();
     await screen.findByText(/no hay sesión activa/i);
     expect(fake.callsTo("shift_handovers", "insert")).toHaveLength(0);
+    expect(fake.rpcCalls).toHaveLength(0);
   });
 
-  it("registra el relevo y solo los bloques con contenido, recortados", async () => {
+  it("registra el relevo en UNA llamada atómica (create_handover) con solo los bloques con contenido, recortados", async () => {
     const fake = setup({ user: { id: "user-staff" } });
     type(/departamento/i, "pisos");
     type("Turno", "noche");
@@ -85,22 +87,33 @@ describe("HandoverForm", () => {
 
     await screen.findByText(/relevo registrado/i);
 
-    const [handover] = fake.callsTo("shift_handovers", "insert");
-    expect(handover.payload).toEqual({ org_id: ORG, department: "pisos", shift_type: "noche", created_by: "user-staff" });
-
-    const [items] = fake.callsTo("handover_items", "insert");
-    expect(items.payload).toEqual([
-      { handover_id: expect.any(String), org_id: ORG, block: "pendientes", content: "Revisar minibar 101" },
-      { handover_id: expect.any(String), org_id: ORG, block: "avisos", content: "Grupo a las 16h" },
+    expect(fake.rpcCalls).toEqual([
+      {
+        fn: "create_handover",
+        args: {
+          p_org_id: ORG,
+          p_department: "pisos",
+          p_shift_type: "noche",
+          p_items: [
+            { block: "pendientes", content: "Revisar minibar 101" },
+            { block: "avisos", content: "Grupo a las 16h" },
+          ],
+        },
+      },
     ]);
+    // Nada de inserts sueltos: si el segundo fallara quedaría una cabecera huérfana.
+    expect(fake.callsTo("shift_handovers", "insert")).toHaveLength(0);
+    expect(fake.callsTo("handover_items", "insert")).toHaveLength(0);
     expect(screen.getByText(/noche/i)).toBeTruthy();
   });
 
-  it("muestra el error de la base de datos si el insert falla y no crea items", async () => {
-    const fake = setup({ insertErrors: { shift_handovers: { message: "new row violates row-level security policy" } } });
+  it("muestra el error de la base de datos si create_handover falla y no da el relevo por registrado", async () => {
+    const fake = setup({ rpcResults: { create_handover: { data: null, error: { message: "new row violates row-level security policy" } } } });
     type(/^incidencias/i, "Fuga en 204");
     submit();
     await screen.findByText(/row-level security/i);
+    expect(screen.queryByText(/relevo registrado/i)).toBeNull();
+    expect(fake.callsTo("shift_handovers", "insert")).toHaveLength(0);
     expect(fake.callsTo("handover_items", "insert")).toHaveLength(0);
   });
 

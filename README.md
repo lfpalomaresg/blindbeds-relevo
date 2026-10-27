@@ -37,7 +37,7 @@ src/
 ├── types/              # Tipos compartidos
 └── hooks/              # useAuth
 supabase/
-├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico
+├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico · 000006 relevo atómico
 └── variants/           # 000002: variante «proyecto compartido APPCC», NO aplicar
 tests/
 ├── db/                 # Matriz RLS sobre Postgres efímero (initdb + pg_ctl)
@@ -83,15 +83,15 @@ Postgres efímero local y comprueba las policies para staff / supervisor / admin
 ## Módulos
 
 ### Handover (FR-005)
-Formulario estructurado de 4 bloques (pendientes, VIPs, incidencias, avisos) que cada empleado rellena al terminar su turno. Los items no resueltos persisten hasta que alguien los cierra.
+Formulario estructurado de 4 bloques (pendientes, VIPs, incidencias, avisos) que cada empleado rellena al terminar su turno. El relevo y sus items se guardan con la función `create_handover` en una sola transacción (migración 000006): si algo falla no queda un relevo a medias. Los items no resueltos persisten hasta que alguien los cierra.
 
 ### Averías (FR-006)
-Parte de avería con foto opcional, prioridad y estado (abierto → en curso → cerrado). Tras cada cambio de estado se intenta registrar una fila en `ticket_updates` (solo con el estado nuevo); el resultado no se comprueba, así que si esa inserción falla el cambio de estado se guarda sin historial. Aún no hay vista de historial ni por activo. QR escaneable por habitación/equipo; los activos y sus códigos QR se dan de alta por SQL (no hay UI de gestión).
+Parte de avería con foto opcional, prioridad y estado (abierto → en curso → cerrado). Cada cambio de estado se hace con la función `change_ticket_status`, que actualiza el parte y registra la traza en `ticket_updates` (estado de origen y destino, quién) en una sola transacción (migración 000005): o se guardan ambos o ninguno. Aún no hay vista de historial ni por activo. QR escaneable por habitación/equipo; los activos y sus códigos QR se dan de alta por SQL (no hay UI de gestión).
 
 ## Seguridad
 
 - RLS en las 7 tablas públicas con políticas por organización
-- Auth vía Supabase con magic link (sin contraseñas). Flujo pendiente de verificar: el enlace redirige a la raíz y no a `/auth/callback`, así que probablemente no inicia sesión (riesgo R1 en `docs/32_TEXTOS_VS_REALIDAD.md`)
+- Auth vía Supabase con magic link (sin contraseñas): el enlace vuelve a `/auth/callback`, que canjea el `code` (PKCE, cliente `@supabase/ssr` con sesión en cookies) y redirige a `/dashboard`; los errores se muestran en `/login`. Probado con tests; pendiente de verificar contra un Supabase real (añadir `<origen>/auth/callback` a las Redirect URLs del proyecto). Ver R1 en `docs/32_TEXTOS_VS_REALIDAD.md`
 - `src/proxy.ts` protege todas las rutas salvo login, callbacks de auth y ficheros PWA; falla cerrado si falta configuración
 - Validación de entrada en formularios: catálogos, límites de longitud, fotos ≤ 10 MB JPEG/PNG/WebP
 - Fotos en bucket privado scoped por org_id (`<org_id>/<uuid>.<ext>`)

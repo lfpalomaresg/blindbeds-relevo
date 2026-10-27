@@ -17,7 +17,10 @@ export function LoginForm() {
     const supabase = createBrowserClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      // /auth/callback canjea el `code` por la sesión y redirige a /dashboard
+      // (su `next` por defecto). Sin query string para que encaje tal cual en
+      // la lista de Redirect URLs de Supabase.
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
 
     setLoading(false);

@@ -71,12 +71,29 @@ describe("README frente al código", () => {
     expect(README).not.toMatch(/trazabilidad completa/i);
   });
 
-  it("no afirma que todo cambio de estado queda en ticket_updates (el insert no comprueba errores)", () => {
-    expect(README).not.toMatch(
-      /(cada|todos?\s+los)\s+cambios?\s+de\s+estado[^.\n]*\b(se\s+registran?|quedan?\s+registrados?)\b/i,
-    );
-    expect(README).toMatch(/se intenta registrar[^\n]*ticket_updates/i);
-    expect(README).toMatch(/si (esa|la) inserción falla[^\n]*sin historial/i);
+  it("describe la traza de estados como atómica (change_ticket_status, 000005) y no como un insert que puede fallar", () => {
+    expect(README).not.toMatch(/se intenta registrar[^\n]*ticket_updates/i);
+    expect(README).not.toMatch(/si (esa|la) inserción falla[^\n]*sin historial/i);
+    expect(README).toMatch(/change_ticket_status[^\n]*(misma|una sola) transacción/i);
+  });
+
+  it("describe el relevo como atómico (create_handover, 000006)", () => {
+    expect(README).toMatch(/create_handover[^\n]*(misma|una sola) transacción/i);
+  });
+
+  it("no dice que el magic link redirige a la raíz una vez corregido", () => {
+    const login = read("src/components/auth/LoginForm.tsx");
+    if (/emailRedirectTo:[^\n]*\/auth\/callback/.test(login)) {
+      const authLine = README.split("\n").find((line) => /^- Auth vía Supabase/.test(line)) ?? "";
+      expect(authLine).not.toMatch(/redirige a la raíz/i);
+      expect(authLine).toMatch(/\/auth\/callback/);
+    }
+  });
+
+  it("el one-pager (docs/33) no dice que faltan las policies de storage si existe 000003", () => {
+    const onePager = read("docs/33_ONE_PAGER_RELEVO.md");
+    expect(onePager).not.toMatch(/faltan las policies/i);
+    expect(onePager).not.toMatch(/sin policies en `storage\.objects`/i);
   });
 
   it("no da la PWA por lista mientras el manifest apunte a iconos que no existen", () => {

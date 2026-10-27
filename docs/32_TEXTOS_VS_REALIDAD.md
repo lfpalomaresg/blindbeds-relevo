@@ -72,7 +72,7 @@ Leyenda: ✅ cierto · ❌ falso, corregido · ⚠️ dudoso o fuera de alcance 
 
 ## 4. Riesgos funcionales detectados (no son textos; no se han tocado)
 
-- **R1 — El enlace mágico probablemente no inicia sesión.** `emailRedirectTo` apunta
+- **R1 — El enlace mágico probablemente no inicia sesión.** ✅ *Corregido en la rama `mvp/sprint1-2026-10-27` (27/10): `emailRedirectTo` → `/auth/callback` y cliente de navegador de `@supabase/ssr` (PKCE + cookies); pendiente de probar en un Supabase real. Nota conservada como histórico.* `emailRedirectTo` apunta
   a la raíz, que el proxy redirige a `/login` sin sesión, y nadie canjea el `code`.
   Solo funcionaría si la plantilla de correo de Supabase se cambia para usar
   `/auth/confirm?token_hash=…`, y el runbook no lo indica. Sin un Supabase real no
