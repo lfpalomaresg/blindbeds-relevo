@@ -114,10 +114,24 @@ function pickUnprivilegedUser(): string {
   throw new Error("Running as root and no unprivileged user (postgres/nobody) found for initdb");
 }
 
+/**
+ * `LC_ALL=C` para todos los binarios, como en el harness de Supply: en macOS,
+ * con `LANG`/`LC_*` en un locale distinto de C (p. ej. es_ES.UTF-8), el
+ * postmaster puede morir al arrancar con "postmaster became multithreaded
+ * during startup". También deja los mensajes del servidor en inglés en todas
+ * las máquinas, como en CI.
+ */
+function pgEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, LC_ALL: "C" };
+}
+
 function makeRunner(): Runner {
   const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
   if (!isRoot) {
-    return { osUser: null, run: (cmd, args, opts) => void execFileSync(cmd, args, opts) };
+    return {
+      osUser: null,
+      run: (cmd, args, opts) => void execFileSync(cmd, args, { ...opts, env: pgEnv() }),
+    };
   }
   const osUser = pickUnprivilegedUser();
   return {
@@ -126,7 +140,7 @@ function makeRunner(): Runner {
       void execFileSync(
         "setpriv",
         [`--reuid=${osUser}`, `--regid=${osUser}`, "--clear-groups", cmd, ...args],
-        opts,
+        { ...opts, env: pgEnv() },
       ),
   };
 }
