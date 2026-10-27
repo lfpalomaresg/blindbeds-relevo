@@ -5,6 +5,7 @@ import {
   buildPhotoPath,
   isUuid,
   validateHandoverInput,
+  photoBytesMatchType,
   validatePhoto,
   validateTicketInput,
 } from "@/lib/validation";
@@ -160,5 +161,30 @@ describe("buildPhotoPath", () => {
     expect(() => buildPhotoPath("../otra-org", "jpg", "11111111-1111-4111-8111-111111111111")).toThrow();
     expect(() => buildPhotoPath(ORG, "jpg", "../../x")).toThrow();
     expect(() => buildPhotoPath(ORG, "jpg/../x", "11111111-1111-4111-8111-111111111111")).toThrow();
+  });
+});
+
+describe("photoBytesMatchType — la foto es lo que dice ser (F3, informe e2e 27/10)", () => {
+  const bytes = (...b: number[]) => Uint8Array.from(b);
+  const JPEG = bytes(0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1);
+  const PNG = bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d);
+  const WEBP = bytes(0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50);
+  const TEXT = new TextEncoder().encode("esto no es un jpeg");
+
+  it("acepta cabeceras reales de JPEG, PNG y WebP con su tipo", () => {
+    expect(photoBytesMatchType("image/jpeg", JPEG)).toBe(true);
+    expect(photoBytesMatchType("image/png", PNG)).toBe(true);
+    expect(photoBytesMatchType("image/webp", WEBP)).toBe(true);
+  });
+
+  it("rechaza texto con tipo de imagen y cabeceras cruzadas", () => {
+    expect(photoBytesMatchType("image/jpeg", TEXT)).toBe(false);
+    expect(photoBytesMatchType("image/png", JPEG)).toBe(false);
+    expect(photoBytesMatchType("image/webp", bytes(0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x41, 0x56, 0x49, 0x20))).toBe(false);
+  });
+
+  it("rechaza tipos fuera de la lista y cabeceras demasiado cortas", () => {
+    expect(photoBytesMatchType("image/gif", JPEG)).toBe(false);
+    expect(photoBytesMatchType("image/jpeg", bytes(0xff, 0xd8))).toBe(false);
   });
 });

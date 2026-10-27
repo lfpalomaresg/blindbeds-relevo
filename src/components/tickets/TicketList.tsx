@@ -109,11 +109,11 @@ export function TicketList({ orgId }: TicketListProps) {
 
       {tickets.map((ticket) => (
         <article key={ticket.id} aria-label={ticket.title} className="border border-gray-200 rounded-lg p-4">
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <h3 className="font-medium text-gray-900">{ticket.title}</h3>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="min-w-0">
+              <h3 className="font-medium text-gray-900 wrap-anywhere">{ticket.title}</h3>
               {ticket.description && (
-                <p className="text-sm text-gray-500 mt-1">{ticket.description}</p>
+                <p className="text-sm text-gray-500 mt-1 wrap-anywhere">{ticket.description}</p>
               )}
             </div>
             <span

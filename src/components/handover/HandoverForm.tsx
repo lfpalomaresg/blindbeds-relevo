@@ -149,8 +149,8 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
           </h3>
           <ul className="space-y-1 text-sm text-amber-700">
             {pendingItems.map((item) => (
-              <li key={item.id} className="flex justify-between">
-                <span>[{HANDOVER_BLOCKS.find((b) => b.value === item.block)?.label}] {item.content}</span>
+              <li key={item.id} className="flex justify-between gap-2">
+                <span className="min-w-0 wrap-anywhere">[{HANDOVER_BLOCKS.find((b) => b.value === item.block)?.label}] {item.content}</span>
                 <span className="text-amber-500 text-xs">
                   {new Date(item.created_at).toLocaleDateString()}
                 </span>

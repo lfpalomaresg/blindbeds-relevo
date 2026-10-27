@@ -40,10 +40,28 @@ describe("LoginForm — enlace mágico", () => {
     expect(redirect.pathname).toBe("/auth/callback");
   });
 
-  it("si Supabase devuelve error no da el enlace por enviado", async () => {
-    state.signInWithOtp = vi.fn(async () => ({ error: { message: "Email rate limit exceeded" } }));
+  it("si Supabase devuelve error no da el enlace por enviado y lo explica en español", async () => {
+    state.signInWithOtp = vi.fn(async () => ({
+      error: { code: "over_email_send_rate_limit", status: 429, message: "For security purposes, you can only request this after 37 seconds." },
+    }));
     submitEmail("persona@example.test");
-    await screen.findByText(/rate limit/i);
+    expect((await screen.findByRole("alert")).textContent).toContain("Espera 37 segundos");
+    expect(screen.queryByText(/for security purposes/i)).toBeNull();
     expect(screen.queryByText(/revisa tu email/i)).toBeNull();
+  });
+
+  it("no crea cuentas: pide el enlace solo para usuarios ya dados de alta", async () => {
+    submitEmail("persona@example.test");
+    await screen.findByText(/revisa tu email/i);
+    const [{ options }] = state.signInWithOtp.mock.calls[0] as [{ options: { shouldCreateUser?: boolean } }];
+    expect(options.shouldCreateUser).toBe(false);
+  });
+
+  it("un correo no dado de alta ve lo mismo que uno dado de alta (no delata quién existe)", async () => {
+    state.signInWithOtp = vi.fn(async () => ({ error: { code: "otp_disabled", status: 422, message: "Signups not allowed for otp" } }));
+    submitEmail("nadie@example.test");
+    await screen.findByText(/revisa tu email/i);
+    expect(screen.getByText(/si .*está dado de alta/i)).toBeTruthy();
+    expect(screen.queryByText(/signups not allowed/i)).toBeNull();
   });
 });

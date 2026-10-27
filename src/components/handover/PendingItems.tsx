@@ -79,12 +79,12 @@ export function PendingItems({ orgId }: PendingItemsProps) {
     <div className="space-y-2">
       {messages}
       {items.map((item) => (
-        <div key={item.id} className="flex items-start justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <div>
+        <div key={item.id} className="flex items-start justify-between gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="min-w-0">
             <span className="text-xs font-medium text-amber-600 uppercase">
               {HANDOVER_BLOCKS.find((b) => b.value === item.block)?.label}
             </span>
-            <p className="text-sm text-gray-800 mt-1">{item.content}</p>
+            <p className="text-sm text-gray-800 mt-1 wrap-anywhere">{item.content}</p>
             <p className="text-xs text-gray-400 mt-1">
               {new Date(item.created_at).toLocaleDateString("es-ES", {
                 day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",

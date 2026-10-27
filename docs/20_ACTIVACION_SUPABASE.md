@@ -98,8 +98,14 @@ la app que usa `change_ticket_status`, aplicar
 La app no tiene alta de organizaciones ni invitaciones (RLS impide crear
 `organizations` desde el cliente). Con el *SQL Editor* del dashboard o `psql`:
 
+**Antes, cerrar el alta:** *Authentication → Sign In / Providers →* desactivar *Allow new users
+to sign up*. La app ya pide el enlace con `shouldCreateUser: false`, pero sin este interruptor
+cualquiera podría crear cuentas llamando a la API directamente (informe e2e del 27/10). Con el
+alta cerrada, un correo que no existe ve lo mismo que uno que sí, y no recibe nada.
+
 ```sql
--- 1) El usuario entra una vez con magic link para que exista en auth.users.
+-- 1) Crear el usuario: Authentication → Users → «Add user» → «Send invitation»
+--    (o «Create new user» con «Auto Confirm User»). El enlace mágico ya no crea cuentas.
 -- 2) Vincularlo a la organización demo como admin:
 insert into public.memberships (org_id, user_id, role)
 select '00000000-0000-0000-0000-000000000001', id, 'admin'

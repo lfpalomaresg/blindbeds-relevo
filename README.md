@@ -63,6 +63,25 @@ npm test                            # Tests (en local RLS se omite con aviso si 
 npm run test:rls                    # Solo matriz RLS; exige initdb/pg_ctl instalados
 ```
 
+### Con Supabase local (sin proyecto en la nube)
+
+Con Docker en marcha:
+
+```bash
+supabase start                 # aplica supabase/migrations/ + supabase/seed.sql
+supabase status -o env         # API_URL y ANON_KEY → .env.local (solo valen en este Mac)
+npm run dev                    # http://localhost:3000/login
+supabase db reset              # vuelve a empezar: migraciones + seed
+supabase stop                  # apaga (conserva los datos)
+```
+
+`supabase/seed.sql` crea el **Hotel Demo Mirador** (y un segundo hotel, Costa, para
+comprobar que la RLS no mezcla datos) con usuarios `@example.com`:
+`direccion` (admin), `gobernanta` (supervisor), `recepcion` y `mantenimiento` (staff),
+`costa` (admin de Costa). El enlace mágico no sale a internet: aparece en el buzón local
+`http://127.0.0.1:54324`. Panel de Supabase: `http://127.0.0.1:54323`.
+Es solo para local: `setup-supabase-pro.sh` carga `scripts/seed-demo.sql`, no este fichero.
+
 ## Migraciones
 
 ```bash

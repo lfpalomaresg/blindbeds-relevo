@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { LIMITS, buildPhotoPath, validatePhoto, validateTicketInput } from "@/lib/validation";
+import {
+  LIMITS,
+  PHOTO_SNIFF_BYTES,
+  buildPhotoPath,
+  photoBytesMatchType,
+  validatePhoto,
+  validateTicketInput,
+} from "@/lib/validation";
 import { TICKET_PRIORITIES } from "@/types";
 import type { TicketPriority } from "@/types";
 import { QRScanner } from "./QRScanner";
@@ -80,6 +87,13 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
     if (photoCheck && !photoCheck.ok) {
       setError(photoCheck.error);
       return;
+    }
+    if (photo && photoCheck?.ok) {
+      const head = new Uint8Array(await photo.slice(0, PHOTO_SNIFF_BYTES).arrayBuffer());
+      if (!photoBytesMatchType(photoCheck.value.contentType, head)) {
+        setError("Ese fichero no es una foto válida. Usa una foto JPEG, PNG o WebP.");
+        return;
+      }
     }
 
     setSaving(true);
