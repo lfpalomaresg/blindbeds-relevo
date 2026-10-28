@@ -60,17 +60,14 @@ roles, ni activos, ni detalle de un parte. Los relevos sí tienen lista y detall
 
 **No existen todavía** invitaciones ni pantalla de alta.
 
-> **Procedimiento pendiente de validar. No usarlo en un hotel hasta que pase
-> la comprobación final (paso 6) de
+> **Procedimiento pendiente de validar en la nube. No usarlo en un hotel hasta
+> que pase la comprobación final (paso 6) de
 > [20_ACTIVACION_SUPABASE.md](20_ACTIVACION_SUPABASE.md).** El paso 1 depende
-> del inicio de sesión por enlace mágico, que nunca se ha ejecutado contra un
-> Supabase real. Hay un riesgo concreto: el enlace vuelve a la raíz del sitio
-> (`emailRedirectTo: window.location.origin`, `LoginForm.tsx:20`) y no a
-> `/auth/callback`, que es la ruta que canjea el código por la sesión
-> (`src/app/auth/callback/route.ts:35`). La raíz no es pública
-> (`src/lib/auth-paths.ts:7-13`), así que el proxy podría devolver al empleado
-> a `/login` antes de crear la sesión (`src/proxy.ts:48-50`). Ver §5,
-> «Problemas de acceso».
+> del inicio de sesión por enlace mágico. Contra Supabase local está probado de
+> punta a punta (e2e, `docs/34_INFORME_E2E_2026-10-27.md`); contra un Supabase
+> real y un correo real, todavía no. El enlace vuelve a `/auth/callback`
+> (`emailRedirectTo`, `LoginForm.tsx`) o, con la plantilla recomendada, a
+> `/auth/confirm` (ver §1, paso 5, de 20_ACTIVACION_SUPABASE.md).
 
 **Quién puede hacer cada cosa.** Hay dos autoridades distintas y no deben
 confundirse:
@@ -452,11 +449,12 @@ Comprobar en este orden:
   (`src/app/auth/callback/route.ts:11-38`, `src/proxy.ts:15-17`), pero la
   pantalla de login **no muestra** ese error (`src/app/login/page.tsx`,
   `LoginForm.tsx`): el usuario solo ve el formulario otra vez. Mirar la URL.
-- El enlace mágico vuelve a la raíz del sitio (`emailRedirectTo:
-  window.location.origin`, `LoginForm.tsx:20`), no a `/auth/callback`. Verificar
-  el flujo completo el día de la activación (paso 6 de
-  [20_ACTIVACION_SUPABASE.md](20_ACTIVACION_SUPABASE.md)); si el enlace deja al
-  usuario de nuevo en `/login`, esta línea es la primera sospechosa.
+- «El enlace no funciona» abriéndolo en otro navegador o en otro dispositivo:
+  con la plantilla por defecto de Supabase el enlace es PKCE y solo vale en el
+  navegador donde se pidió. Con la plantilla recomendada (`/auth/confirm?token_hash=…`,
+  §1, paso 5, de [20_ACTIVACION_SUPABASE.md](20_ACTIVACION_SUPABASE.md)) vale en cualquiera.
+  En iPhone, si la app está instalada en la pantalla de inicio, el enlace del
+  correo abre Safari y la sesión queda en Safari, no en la app instalada.
 
 ---
 

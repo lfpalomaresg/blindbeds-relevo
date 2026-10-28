@@ -26,6 +26,8 @@ marcha (podría llevar otras variables). Como Next no deja dos `next dev` en la 
 | `01-guion.spec.ts` | Tareas R1-R5 y M1-M4 de `docs/31_GUION_PRUEBA_USUARIOS.md`, en orden |
 | `02-aislamiento.spec.ts` | Dos hoteles: ninguno ve datos del otro, ni por URL directa |
 | `03-robustez.spec.ts` | Sin sesión, enlace reutilizado, correo sin hotel, doble clic, atrás, textos raros, fotos falsas, colores, ancho en 360/412 px |
+| `04-fotos.spec.ts` | Storage real: URL firmada dentro del hotel, denegada a otro hotel, subida a carpeta ajena y > 10 MB rechazadas |
+| `05-enlace-token-hash.spec.ts` | El enlace de la plantilla recomendada (`/auth/confirm?token_hash=…`) abre sesión en un navegador que no lo pidió; reutilizado, vuelve al login |
 
 Las carencias de producto que el guion pregunta al usuario (no hay activo en la tarjeta, no se ve el
 autor del pendiente…) salen como anotaciones `mejora` en el informe, no como fallos.

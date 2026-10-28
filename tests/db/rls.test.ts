@@ -427,6 +427,22 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (todas las migraciones)
       });
     });
 
+    it("abierto → en curso → cerrado deja 2 filas en el historial y el parte cerrado no se reabre (MVP §6)", async () => {
+      await runAs(db, staffA, async (q) => {
+        expect((await q(call, [TICKET_A, "abierto", "en_curso"])).rows[0].ok).toBe(true);
+        expect((await q(call, [TICKET_A, "en_curso", "cerrado"])).rows[0].ok).toBe(true);
+        expect((await q(trace, [TICKET_A])).rows).toEqual([
+          { status_from: "abierto", status_to: "en_curso", created_by: staffA.userId },
+          { status_from: "en_curso", status_to: "cerrado", created_by: staffA.userId },
+        ]);
+        await q("savepoint s");
+        await expect(q(call, [TICKET_A, "cerrado", "abierto"])).rejects.toMatchObject({ code: INVALID_TRANSITION });
+        await q("rollback to savepoint s");
+        expect((await q(ticketState, [TICKET_A])).rows[0].status).toBe("cerrado");
+        expect((await q(trace, [TICKET_A])).rows).toHaveLength(2);
+      });
+    });
+
     it("si falla la inserción en el historial, el cambio de estado se revierte (atomicidad)", async () => {
       await db.query("begin");
       try {

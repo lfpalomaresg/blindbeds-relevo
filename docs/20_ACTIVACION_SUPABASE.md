@@ -43,6 +43,22 @@ de Postgres es un fallo: los tests de `tests/db` no se omiten nunca en verde.
 4. Authentication → URL Configuration: `Site URL` = dominio de Vercel;
    añadir `https://<dominio>/auth/callback` y `https://<dominio>/auth/confirm`
    a *Redirect URLs*. Authentication → Providers → Email: activar *magic link*.
+5. Authentication → Email Templates → **Magic Link**: sustituir el cuerpo por la
+   plantilla de abajo. La app pide el enlace con
+   `emailRedirectTo: <origen>/auth/callback` (`LoginForm.tsx`); con la plantilla
+   por defecto (`{{ .ConfirmationURL }}`) el enlace pasa por `/auth/v1/verify` y
+   vuelve a `/auth/callback?code=…`, que es PKCE: **solo funciona en el mismo
+   navegador donde se pidió**. Es lo que le pasó a APPCC el 28/10 («no hay
+   sesión activa» al abrir el correo en otro navegador). Con `token_hash` el
+   enlace va a `/auth/confirm`, que canjea con `verifyOtp` y vale en cualquier
+   navegador o dispositivo. Requiere que *Site URL* sea el dominio de Relevo.
+
+   ```html
+   <h2>Entrar en Relevo</h2>
+   <p>Pulsa el enlace para entrar. Caduca en una hora y solo se puede usar una vez.</p>
+   <p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">Entrar en Relevo</a></p>
+   <p>Si no lo has pedido tú, ignora este correo.</p>
+   ```
 
 ## 2. Configurar el repo (5 min)
 
@@ -123,7 +139,11 @@ redirige a `/login?error=config` si faltan.
 
 ## 6. Comprobación final (10 min)
 
-- Entrar con magic link → `/dashboard` muestra la organización.
+- Entrar con magic link → `/dashboard` muestra la organización. **Smoke R1 del
+  MVP:** pedir el enlace en el móvil y abrirlo desde la app de correo, en
+  **iOS Safari** y en **Android Chrome**; las dos deben acabar en `/dashboard` con
+  sesión. Probar también a abrir el enlace en otro navegador (debe funcionar
+  con la plantilla del paso 5 de §1).
 - Crear un relevo con un bloque → aparece en «Pendientes sin resolver».
 - Crear un parte con foto JPEG < 10 MB → sube a `ticket-photos/<org>/<uuid>.jpg`.
   **Esta es la verificación definitiva de las policies de storage** (ver «Fotos»
