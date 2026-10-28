@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -12,12 +13,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Sin modo oscuro: los componentes usan colores claros fijos (text-gray-900, bg-white…),
+   así que un fondo oscuro del sistema dejaba los títulos ilegibles (F4, informe e2e 27/10). */
 
 body {
   background: var(--background);

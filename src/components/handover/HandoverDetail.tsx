@@ -89,7 +89,7 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
             <ul className="space-y-2">
               {blockItems.map((item) => (
                 <li key={item.id} className="flex items-start justify-between gap-3">
-                  <span className={`whitespace-pre-wrap ${item.resolved ? "text-gray-400 line-through" : "text-gray-800"}`}>
+                  <span className={`min-w-0 whitespace-pre-wrap wrap-anywhere ${item.resolved ? "text-gray-400 line-through" : "text-gray-800"}`}>
                     {item.content}
                   </span>
                   {item.resolved && (

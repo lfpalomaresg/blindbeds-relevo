@@ -37,8 +37,15 @@ function setup(options: ConstructorParameters<typeof FakeSupabase>[0] = {}, prop
 const submit = () => fireEvent.submit(screen.getByRole("button", { name: /crear parte/i }).closest("form")!);
 const type = (label: RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const pickPhoto = (file: File) => fireEvent.change(screen.getByLabelText(/foto/i), { target: { files: [file] } });
-const makeFile = (size: number, type: string, name = "foto.jpg") => {
-  const file = new File(["x"], name, { type });
+// Real file signatures: TicketForm checks the first bytes (photoBytesMatchType).
+const SIGNATURES: Record<string, number[]> = {
+  "image/jpeg": [0xff, 0xd8, 0xff, 0xe0],
+  "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  "image/webp": [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50],
+};
+const makeFile = (size: number, type: string, name = "foto.jpg", bytes = SIGNATURES[type] ?? [0x78]) => {
+  const head = Uint8Array.from([...bytes, ...new Array(16).fill(0)]);
+  const file = new File([head], name, { type });
   Object.defineProperty(file, "size", { value: size });
   return file;
 };
@@ -137,6 +144,16 @@ describe("TicketForm", () => {
 
     const [insert] = fake.callsTo("maintenance_tickets", "insert");
     expect((insert.payload as { photo_path: string }).photo_path).toBe(path);
+  });
+
+  it("rechaza un fichero que dice ser JPEG pero no lo es, sin subir nada", async () => {
+    const fake = setup();
+    type(/título/i, "Grifo gotea");
+    pickPhoto(makeFile(2048, "image/jpeg", "foto.jpg", [...new TextEncoder().encode("esto no es un jpeg")]));
+    submit();
+    await screen.findByText(/no es una foto válida/i);
+    expect(fake.uploads).toHaveLength(0);
+    expect(fake.callsTo("maintenance_tickets", "insert")).toHaveLength(0);
   });
 
   it("si la subida falla, muestra el error y no crea el parte", async () => {

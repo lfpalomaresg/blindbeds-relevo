@@ -54,3 +54,6 @@ graphify-out/
 .claude/worktrees/
 .conclave/
 .playwright/
+
+# Playwright (e2e/)
+/e2e-results/

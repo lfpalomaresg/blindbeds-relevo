@@ -240,3 +240,30 @@ Suite después: 272 tests / 17 ficheros, lint 0, typecheck 0, `next build` OK.
 - **Hecho:** definición MVP en `docs/MVP.md` (canónica en `AI_OS/PROJECTS/_mvp/`). Sprint 1 en la rama local `mvp/sprint1-2026-10-27` (2 commits, gate conclave pasado, sin push).
 - **Pendiente:** revisión del operador → merge → deploy. Backlog con IDs en `docs/MVP.md` §7.
 - **Decidido:** T1-T8 de la cartera (ICP hotel independiente 20-100 hab., precios, abogado ya, CRM Airtable).
+
+## 2026-10-28 — Claude Code (Mac) · turno de noche desatendido
+
+Rama local `noche/relevo-2026-10-28` (desde `d4accaf`), sin push.
+
+### Hecho
+- **F5** (`3be69d0`): `ServiceWorker.tsx` solo registra `/sw.js` en producción; en desarrollo y test
+  desregistra el que quedara. Test nuevo visto en rojo (2 fallos) → verde.
+- **Arnés** (`891ff1d`): `tests/harness/pg.ts` lanza `initdb`/`pg_ctl` con `LC_ALL=C`, como Supply.
+  Test con binarios falsos que registran el `LC_ALL` recibido, visto en rojo (`es_ES.UTF-8`) → verde.
+  Ojo: esta noche el fallo real («postmaster became multithreaded») **no se reprodujo** en este Mac;
+  la suite ya pasaba sin `LC_ALL=C`. El arreglo es preventivo y alinea con Supply.
+- **Dependabot #13** (`3e9ab4e`, vite 8.3.4) y **#14** (`8c2d1b4`, vitest/@vitest/mocker 5.0.5):
+  aplicados uno tras otro; con cada uno lint 0, tipos 0, 607/607 vitest, build y 28/28 e2e contra
+  Supabase local (con #14 también 259/259 RLS). #14 sola sobre la base: 607/607 y tipos 0.
+- **Extra, rama aparte** `noche/next-16.4.3-2026-10-28` (`b9d6203`): `npm audit --omit=dev` daba
+  1 crítico en `next` ≤ 16.4.0 (RCE en Image Optimization con SVG, RCE en `use cache`, DoS en
+  Server Actions). Next y eslint-config-next 16.4.3 exactas: 0 vulnerabilidades, todo verde (28/28 e2e).
+
+### Pendiente
+- Operador: decidir push/PR de esta rama (o cerrar #13/#14 y dejar que dependabot rebasee) y de
+  la rama de Next 16.4.3.
+- PR #12 (clasificador de oficio): sigue fuera del MVP; ver informe de la noche.
+
+### Decidido
+- vite fijada a 8.3.4 exacta para evaluar la PR tal cual (npm habría elegido 8.3.5).
+- El bump de Next va en rama aparte: es un minor del framework fuera del encargo.

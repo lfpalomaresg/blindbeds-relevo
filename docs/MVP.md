@@ -40,13 +40,17 @@ El operador da de alta la organización y los usuarios (SQL o runbook) → login
 
 ## 6. Criterios de aceptación (DoD)
 - [ ] Plantilla de email de Supabase y `emailRedirectTo` documentados en el runbook (enlace → `/auth/callback?code=…`); smoke con correo real: email nuevo → enlace → `/dashboard` con sesión, en iOS Safari y Android Chrome. Hasta ese smoke, R1 es «no verificado», no «roto».
-- [ ] Relevo de 4 bloques atómico: si falla un ítem, quedan 0 filas (test con Postgres efímero).
-- [ ] El turno entrante ve el último relevo de su departamento con turno, autor y hora.
-- [ ] Parte con foto JPEG ≤ 10 MB visible por URL firmada; otra organización → 403.
-- [ ] Abierto → en curso → cerrado deja 2 filas en `ticket_updates`; un parte cerrado no se reabre.
-- [ ] Lighthouse «installable» en verde.
-- [ ] CI: lint + typecheck + test:rls + build en verde.
-- [ ] Aviso de minimización visible en los campos de texto libre y job de retención (90 días) con test.
+  - ✅ 28/10 documentado: `20_ACTIVACION_SUPABASE.md` §1 paso 5 (plantilla `token_hash` → `/auth/confirm`, válida en cualquier navegador) y §6 (smoke). Probado en local: `e2e/05-enlace-token-hash.spec.ts` y el login completo vía Mailpit (`e2e/01-guion.spec.ts`).
+  - ⏳ Falta el smoke con correo real en iOS y Android: exige un Supabase y un despliegue en la nube, que no existen (producto congelado).
+- [x] Relevo de 4 bloques atómico: si falla un ítem, quedan 0 filas (test con Postgres efímero).
+- [x] El turno entrante ve el último relevo de su departamento con turno, autor y hora.
+- [x] Parte con foto JPEG ≤ 10 MB visible por URL firmada; otra organización → 403.
+- [x] Abierto → en curso → cerrado deja 2 filas en `ticket_updates`; un parte cerrado no se reabre.
+- [x] Lighthouse «installable» en verde. *(Lighthouse 12 ya no tiene categoría PWA y Chromium headless no informa de la instalabilidad; se comprueban los requisitos de Chrome sobre el manifest en `tests/public/icons.test.ts`.)*
+- [x] CI: lint + typecheck + test:rls + build en verde.
+- [x] Aviso de minimización visible en los campos de texto libre y job de retención (90 días) con test.
+
+**Evidencia (28/10/2026, rama `noche/relevo-2026-10-28`):** atómico → `tests/db/create-handover.test.ts` («0 filas»); turno entrante → `e2e/01-guion.spec.ts` R3-R4 y `tests/components/HandoverList.test.tsx`; foto → `e2e/04-fotos.spec.ts` contra el Storage local real (URL firmada 200 en el hotel, denegada a otro hotel, subida ajena y > 10 MB rechazadas); historial → `tests/db/rls.test.ts` («2 filas… no se reabre»); CI → `.github/workflows/ci.yml` en verde en el PR #15; minimización y retención → `HandoverForm.test.tsx` y `tests/db/retention-directory.test.ts`. Todos los tests nuevos se vieron en rojo antes que en verde.
 
 **Validación comercial (después del DoD técnico, no forma parte de él):** piloto de 2 semanas en un hotel **externo** con ≥ 1 relevo por turno al día. El interés de un hotel externo **descongela** el producto; el piloto **valida** después.
 

@@ -9,6 +9,11 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(__dirname, "../..");
 const manifest = JSON.parse(readFileSync(path.join(ROOT, "public/manifest.json"), "utf8")) as {
+  name?: string;
+  short_name?: string;
+  start_url?: string;
+  display?: string;
+  prefer_related_applications?: boolean;
   theme_color: string;
   description: string;
   icons: { src: string; sizes: string; type: string; purpose?: string }[];
@@ -63,6 +68,19 @@ function decodePng(buf: Buffer) {
 }
 
 describe("iconos de la PWA", () => {
+  // MVP §6 «installable»: los requisitos de Chrome para ofrecer la instalación.
+  // Lighthouse 12 ya no los audita y Chromium headless no los informa por DevTools.
+  it("cumple los requisitos de instalación de Chrome y el layout enlaza el manifest", () => {
+    expect(manifest.name || manifest.short_name).toBeTruthy();
+    expect(manifest.start_url).toMatch(/^\//);
+    expect(["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"]).toContain(manifest.display);
+    expect(manifest.prefer_related_applications).not.toBe(true);
+    expect(manifest.icons.some((i) => i.type === "image/png" && i.sizes === "192x192")).toBe(true);
+    expect(manifest.icons.some((i) => i.type === "image/png" && i.sizes === "512x512")).toBe(true);
+    const layout = readFileSync(path.join(ROOT, "src/app/layout.tsx"), "utf8");
+    expect(layout).toMatch(/manifest:\s*"\/manifest\.json"/);
+  });
+
   it("el manifest declara 192 y 512 en PNG y el color de tema es el amarillo de marca", () => {
     expect(manifest.icons.map((i) => i.sizes).sort()).toEqual(["192x192", "512x512"]);
     expect(manifest.theme_color.toUpperCase()).toBe("#F0AB00");

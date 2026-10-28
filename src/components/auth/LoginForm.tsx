@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { otpRequestOutcome } from "@/lib/login-errors";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
@@ -20,14 +21,17 @@ export function LoginForm() {
       // /auth/callback canjea el `code` por la sesión y redirige a /dashboard
       // (su `next` por defecto). Sin query string para que encaje tal cual en
       // la lista de Redirect URLs de Supabase.
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      // Sin alta por enlace: los usuarios los crea el operador (ver
+      // docs/20_ACTIVACION_SUPABASE.md). Además, enable_signup = false en Supabase.
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback`, shouldCreateUser: false },
     });
 
     setLoading(false);
-    if (error) {
-      setError(error.message);
-    } else {
+    const outcome = otpRequestOutcome(error);
+    if (outcome.sent) {
       setSent(true);
+    } else {
+      setError(outcome.message);
     }
   }
 
@@ -36,8 +40,8 @@ export function LoginForm() {
       <div className="text-center space-y-4">
         <h2 className="text-xl font-semibold">Revisa tu email</h2>
         <p className="text-gray-600">
-          Te hemos enviado un enlace mágico a <strong>{email}</strong>.
-          Haz clic en él para acceder.
+          Si <strong>{email}</strong> está dado de alta, te hemos enviado un enlace
+          mágico. Haz clic en él para acceder.
         </p>
       </div>
     );
@@ -59,7 +63,7 @@ export function LoginForm() {
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
         />
       </div>
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
       <button
         type="submit"
         disabled={loading}

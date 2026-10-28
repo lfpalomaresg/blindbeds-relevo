@@ -170,3 +170,26 @@ export function buildPhotoPath(orgId: string, ext: string, fileId: string): stri
   if (!Object.values(ALLOWED_PHOTO_TYPES).includes(ext)) throw new Error("unsupported extension");
   return `${orgId}/${fileId}.${ext}`;
 }
+
+/** Bytes que hacen falta leer del principio del fichero para `photoBytesMatchType`. */
+export const PHOTO_SNIFF_BYTES = 12;
+
+const startsWith = (head: Uint8Array, sig: number[], at = 0) => sig.every((b, i) => head[at + i] === b);
+
+/**
+ * El tipo que declara el navegador sale de la extensión: un texto llamado .jpg
+ * pasa `validatePhoto` y el bucket. Esto mira la firma real del fichero.
+ */
+export function photoBytesMatchType(type: string, head: Uint8Array): boolean {
+  if (head.length < PHOTO_SNIFF_BYTES) return false;
+  switch (type) {
+    case "image/jpeg":
+      return startsWith(head, [0xff, 0xd8, 0xff]);
+    case "image/png":
+      return startsWith(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case "image/webp":
+      return startsWith(head, [0x52, 0x49, 0x46, 0x46]) && startsWith(head, [0x57, 0x45, 0x42, 0x50], 8);
+    default:
+      return false;
+  }
+}
