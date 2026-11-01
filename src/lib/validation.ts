@@ -24,6 +24,8 @@ export const LIMITS = {
   handoverContent: 2000,
   ticketTitle: 120,
   ticketDescription: 2000,
+  /** Igual que el check maintenance_tickets_room_number_len (migración 000009). */
+  roomNumber: 20,
   /** Igual que file_size_limit del bucket ticket-photos en la migración. */
   photoBytes: 10 * 1024 * 1024,
 } as const;
@@ -96,6 +98,7 @@ export interface TicketInput {
   description: string;
   priority: string;
   assetId?: string | null;
+  roomNumber?: string | null;
 }
 
 export interface TicketValue {
@@ -104,6 +107,8 @@ export interface TicketValue {
   priority: TicketPriority;
   /** id (uuid) de ticket_assets, nunca el texto del QR. */
   assetId: string | null;
+  /** Habitación o zona; vacío se normaliza a null. */
+  roomNumber: string | null;
 }
 
 export function validateTicketInput(input: TicketInput): Validation<TicketValue> {
@@ -122,6 +127,11 @@ export function validateTicketInput(input: TicketInput): Validation<TicketValue>
     return { ok: false, error: "Prioridad no válida." };
   }
 
+  const roomNumber = (input.roomNumber ?? "").trim();
+  if (roomNumber.length > LIMITS.roomNumber) {
+    return { ok: false, error: `Habitación: máximo ${LIMITS.roomNumber} caracteres.` };
+  }
+
   let assetId: string | null = null;
   if (input.assetId) {
     if (!isUuid(input.assetId)) {
@@ -132,7 +142,13 @@ export function validateTicketInput(input: TicketInput): Validation<TicketValue>
 
   return {
     ok: true,
-    value: { title, description: description || null, priority: input.priority as TicketPriority, assetId },
+    value: {
+      title,
+      description: description || null,
+      priority: input.priority as TicketPriority,
+      assetId,
+      roomNumber: roomNumber || null,
+    },
   };
 }
 

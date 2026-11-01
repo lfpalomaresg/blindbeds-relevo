@@ -29,6 +29,7 @@ interface SelectedAsset {
 export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: TicketFormProps) {
   const supabase = useMemo(() => createBrowserClient(), []);
   const [title, setTitle] = useState("");
+  const [roomNumber, setRoomNumber] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TicketPriority>("normal");
   const [asset, setAsset] = useState<SelectedAsset | null>(initialAssetId ? { id: initialAssetId } : null);
@@ -77,7 +78,13 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
     e.preventDefault();
     setError("");
 
-    const validated = validateTicketInput({ title, description, priority, assetId: asset?.id ?? null });
+    const validated = validateTicketInput({
+      title,
+      description,
+      priority,
+      assetId: asset?.id ?? null,
+      roomNumber,
+    });
     if (!validated.ok) {
       setError(validated.error);
       return;
@@ -124,6 +131,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
     const { error: insertError } = await supabase.from("maintenance_tickets").insert({
       org_id: orgId,
       asset_id: validated.value.assetId,
+      room_number: validated.value.roomNumber,
       title: validated.value.title,
       description: validated.value.description,
       priority: validated.value.priority,
@@ -155,6 +163,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
           onClick={() => {
             setDone(false);
             setTitle("");
+            setRoomNumber("");
             setDescription("");
             setPhoto(null);
             setAsset(null);
@@ -230,6 +239,24 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
             </div>
           </div>
         )}
+
+        <div>
+          <label htmlFor="ticket-room" className="block text-sm font-medium text-gray-700 mb-1">
+            Habitación o zona
+          </label>
+          <input
+            id="ticket-room"
+            value={roomNumber}
+            onChange={(e) => setRoomNumber(e.target.value)}
+            maxLength={LIMITS.roomNumber}
+            inputMode="text"
+            placeholder="Ej: 304 o Piscina"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Nº de habitación o zona. El activo y el QR son opcionales.
+          </p>
+        </div>
 
         <div>
           <label htmlFor="ticket-title" className="block text-sm font-medium text-gray-700 mb-1">Título</label>

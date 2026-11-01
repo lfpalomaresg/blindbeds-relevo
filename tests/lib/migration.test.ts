@@ -28,6 +28,7 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
       "000006_create_handover.sql",
       "000007_handover_author_emails.sql",
       "000008_handover_retention.sql",
+      "000009_ticket_room_number.sql",
     ]);
   });
 });

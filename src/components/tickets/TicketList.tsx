@@ -112,6 +112,9 @@ export function TicketList({ orgId }: TicketListProps) {
           <div className="flex items-start justify-between gap-3 mb-2">
             <div className="min-w-0">
               <h3 className="font-medium text-gray-900 wrap-anywhere">{ticket.title}</h3>
+              {ticket.room_number && (
+                <p className="text-xs text-gray-500 mt-1">Habitación / zona: {ticket.room_number}</p>
+              )}
               {ticket.description && (
                 <p className="text-sm text-gray-500 mt-1 wrap-anywhere">{ticket.description}</p>
               )}

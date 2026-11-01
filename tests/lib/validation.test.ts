@@ -87,10 +87,29 @@ describe("validateHandoverInput", () => {
 describe("validateTicketInput", () => {
   const base = { title: "Grifo gotea", description: "", priority: "normal", assetId: undefined };
 
-  it("acepta un parte mínimo y normaliza descripción vacía a null", () => {
+  it("acepta un parte mínimo y normaliza descripción y habitación vacías a null", () => {
     const r = validateTicketInput(base);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toEqual({ title: "Grifo gotea", description: null, priority: "normal", assetId: null });
+    if (r.ok) {
+      expect(r.value).toEqual({
+        title: "Grifo gotea",
+        description: null,
+        priority: "normal",
+        assetId: null,
+        roomNumber: null,
+      });
+    }
+  });
+
+  it("acepta habitación y la recorta", () => {
+    const r = validateTicketInput({ ...base, roomNumber: "  304 " });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.roomNumber).toBe("304");
+  });
+
+  it("rechaza habitación por encima del límite", () => {
+    expect(validateTicketInput({ ...base, roomNumber: "x".repeat(LIMITS.roomNumber + 1) }).ok).toBe(false);
+    expect(validateTicketInput({ ...base, roomNumber: "x".repeat(LIMITS.roomNumber) }).ok).toBe(true);
   });
 
   it("rechaza título vacío o solo espacios", () => {

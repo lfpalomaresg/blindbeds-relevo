@@ -61,6 +61,8 @@ export interface MaintenanceTicket {
   priority: TicketPriority;
   status: TicketStatus;
   photo_path?: string;
+  /** Habitación o zona (migración 000009). */
+  room_number?: string | null;
   created_by: string;
   assigned_to?: string;
   closed_by?: string;

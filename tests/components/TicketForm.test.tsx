@@ -91,6 +91,7 @@ describe("TicketForm", () => {
     expect(insert.payload).toEqual({
       org_id: ORG,
       asset_id: null,
+      room_number: null,
       title: "Grifo gotea",
       description: null,
       priority: "alta",
