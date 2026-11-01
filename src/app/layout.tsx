@@ -22,13 +22,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-gray-50 antialiased">
         <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
           <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-            <a href="/dashboard" className="font-bold text-orange-600 text-lg">
+            <Link href="/dashboard" className="font-bold text-orange-600 text-lg">
               Blindbeds Relevo
-            </a>
+            </Link>
             <nav className="flex gap-4 text-sm">
-              <a href="/dashboard" className="text-gray-600 hover:text-orange-600">Inicio</a>
+              <Link href="/dashboard" className="text-gray-600 hover:text-orange-600">Inicio</Link>
               <Link href="/handover" className="text-gray-600 hover:text-orange-600">Relevos</Link>
-              <a href="/tickets/new" className="text-gray-600 hover:text-orange-600">Avería</a>
+              <Link href="/tickets/new" className="text-gray-600 hover:text-orange-600">Avería</Link>
             </nav>
           </div>
         </header>

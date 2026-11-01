@@ -219,8 +219,37 @@ usuarios de la app no.
 
 Ejecución manual puntual: `select public.purge_expired_handovers();`.
 
+### Retención de fotos de averías (90 días)
+
+Los partes **no se borran**: se cierran y se conservan como histórico. Lo que
+caduca es la **foto**, que es el dato más sensible (puede captar personas o
+interiores). A los 90 días de cerrar el parte se borra el objeto del bucket
+`ticket-photos` y se deja `photo_path = null`; el parte y su historial siguen
+intactos.
+
+Se hace con un script y no con SQL porque borrar la fila de `storage.objects`
+**no** elimina el objeto del almacenamiento:
+
+```bash
+node --env-file=.env.local scripts/purge-ticket-photos.mjs            # simulación
+node --env-file=.env.local scripts/purge-ticket-photos.mjs --apply    # borra
+node --env-file=.env.local scripts/purge-ticket-photos.mjs --days=30  # otro plazo
+```
+
+Sin `--apply` solo lista lo que borraría: úsalo para revisar antes de tocar
+datos reales. Usa `service_role`, así que **nunca desde el navegador ni desde
+un cron público**; programarlo en el Mac o en el VPS con `cron`/`launchd`.
+
+Para programarlo a diario en el Mac (03:30):
+
+```cron
+30 3 * * * cd /Users/pifanmac/MAIN_PROYECTOS/blindbeds-relevo && /opt/homebrew/bin/node --env-file=.env.local scripts/purge-ticket-photos.mjs --apply >> /tmp/relevo-purge.log 2>&1
+```
+
 ### Lo que no existe todavía
 
+- Retención de **partes** (solo de fotos): un parte cerrado se guarda para
+  siempre. Si el hotel pide plazo, habrá que añadir `purge_expired_tickets()`.
 - «Leído por»: las columnas `read_by`/`read_at` existen
   (`000001_baseline.sql:67-68`) pero ningún código las escribe y no hay
   política `update` sobre `shift_handovers`.

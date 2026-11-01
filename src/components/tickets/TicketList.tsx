@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { MaintenanceTicket, TicketStatus } from "@/types";
 import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types";
@@ -111,7 +112,11 @@ export function TicketList({ orgId }: TicketListProps) {
         <article key={ticket.id} aria-label={ticket.title} className="border border-gray-200 rounded-lg p-4">
           <div className="flex items-start justify-between gap-3 mb-2">
             <div className="min-w-0">
-              <h3 className="font-medium text-gray-900 wrap-anywhere">{ticket.title}</h3>
+              <h3 className="font-medium text-gray-900 wrap-anywhere">
+                <Link href={`/tickets/${ticket.id}`} className="hover:text-orange-600 hover:underline">
+                  {ticket.title}
+                </Link>
+              </h3>
               {ticket.room_number && (
                 <p className="text-xs text-gray-500 mt-1">Habitación / zona: {ticket.room_number}</p>
               )}

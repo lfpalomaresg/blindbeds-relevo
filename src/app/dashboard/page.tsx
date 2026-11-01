@@ -30,7 +30,7 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-500 mt-1">Registra el traspaso de tu turno en 2 minutos</p>
         </Link>
 
-        <a
+        <Link
           href="/tickets/new"
           className="block p-6 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-orange-300 transition-colors"
         >
@@ -39,7 +39,7 @@ export default function DashboardPage() {
           </div>
           <h2 className="font-semibold text-gray-900">Parte de avería</h2>
           <p className="text-sm text-gray-500 mt-1">Reporta una avería con foto y prioridad</p>
-        </a>
+        </Link>
       </div>
 
       <section>
