@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import {
   LIMITS,
@@ -26,6 +26,12 @@ interface SelectedAsset {
   name?: string;
 }
 
+/** Crea/revoca la URL de vista previa; en jsdom URL.createObjectURL no existe. */
+function makePreviewUrl(file: File | null): string | null {
+  if (!file || typeof URL.createObjectURL !== "function") return null;
+  return URL.createObjectURL(file);
+}
+
 export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: TicketFormProps) {
   const supabase = useMemo(() => createBrowserClient(), []);
   const [title, setTitle] = useState("");
@@ -34,6 +40,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
   const [priority, setPriority] = useState<TicketPriority>("normal");
   const [asset, setAsset] = useState<SelectedAsset | null>(initialAssetId ? { id: initialAssetId } : null);
   const [photo, setPhoto] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -64,6 +71,27 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
     setScanning(false);
     await lookupAsset(code, "Activo no reconocido. Vuelve a escanear el QR o crea el parte sin activo.");
   }
+
+  // Vista previa local: se revoca la anterior para no filtrar blobs.
+  function handlePhotoChange(file: File | null) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPhoto(file);
+    setPreviewUrl(makePreviewUrl(file));
+  }
+
+  function clearPhoto() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPhoto(null);
+    setPreviewUrl(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl && typeof URL.revokeObjectURL === "function") {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   async function handleManualCode() {
     const code = manualCode.trim();
@@ -165,7 +193,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
             setTitle("");
             setRoomNumber("");
             setDescription("");
-            setPhoto(null);
+            clearPhoto();
             setAsset(null);
           }}
           className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
@@ -299,18 +327,62 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
         </div>
 
         <div>
-          <label htmlFor="ticket-photo" className="block text-sm font-medium text-gray-700 mb-1">Foto</label>
-          <input
-            id="ticket-photo"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            capture="environment"
-            onChange={(e) => setPhoto(e.target.files?.[0] || null)}
-            className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
-          />
-          <p className="text-xs text-gray-400 mt-1">JPEG, PNG o WebP, máximo 10 MB.</p>
-          {photo && (
-            <p className="text-xs text-gray-500 mt-1">📸 {photo.name}</p>
+          <span className="block text-sm font-medium text-gray-700 mb-1">Foto de la avería</span>
+
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              id="ticket-photo"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              onChange={(e) => handlePhotoChange(e.target.files?.[0] || null)}
+              className="sr-only"
+            />
+            <label
+              htmlFor="ticket-photo"
+              className="flex items-center justify-center gap-2 py-3 px-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-orange-400 hover:text-orange-600 cursor-pointer text-sm text-center"
+            >
+              <span>📷</span> Hacer foto de la avería
+            </label>
+
+            <input
+              id="ticket-photo-gallery"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => handlePhotoChange(e.target.files?.[0] || null)}
+              className="sr-only"
+            />
+            <label
+              htmlFor="ticket-photo-gallery"
+              className="flex items-center justify-center gap-2 py-3 px-3 border border-gray-300 rounded-lg text-gray-600 hover:border-orange-400 hover:text-orange-600 cursor-pointer text-sm text-center"
+            >
+              <span>🖼️</span> Elegir de la galería
+            </label>
+          </div>
+
+          <p className="text-xs text-gray-400 mt-1">
+            JPEG, PNG o WebP, máximo 10 MB. No fotografíes huéspedes ni documentos.
+          </p>
+
+          {previewUrl && (
+            <div className="mt-3 flex items-start gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element -- vista previa local, no pasa por el optimizador */}
+              <img
+                src={previewUrl}
+                alt="Vista previa de la foto"
+                className="h-24 w-auto rounded-lg border border-gray-200"
+              />
+              <div className="text-xs text-gray-500">
+                <p className="wrap-anywhere">{photo?.name}</p>
+                <button
+                  type="button"
+                  onClick={clearPhoto}
+                  className="mt-1 text-red-600 hover:text-red-700"
+                >
+                  Quitar foto
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
