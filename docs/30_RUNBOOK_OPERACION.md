@@ -240,11 +240,29 @@ Sin `--apply` solo lista lo que borraría: úsalo para revisar antes de tocar
 datos reales. Usa `service_role`, así que **nunca desde el navegador ni desde
 un cron público**; programarlo en el Mac o en el VPS con `cron`/`launchd`.
 
-Para programarlo a diario en el Mac (03:30):
+En cada pasada el script además **barre fotos huérfanas**: objetos de
+`{org}/` con más de 24 h que ningún parte referencia (p. ej. la subida fue bien
+pero el alta del parte falló; la app no la borra porque el error puede ser
+ambiguo). Los borrados van por lotes de 50 y solo se vacía `photo_path` de lo
+que Storage confirma borrado. Nunca toca rutas fuera de `{org_id}/{uuid}.ext`.
 
-```cron
-30 3 * * * cd /Users/pifanmac/MAIN_PROYECTOS/blindbeds-relevo && /opt/homebrew/bin/node --env-file=.env.local scripts/purge-ticket-photos.mjs --apply >> /tmp/relevo-purge.log 2>&1
+**Programación (Mac, semanal, lunes 09:30)** con launchd. El envoltorio
+`scripts/launchd/purge-ticket-photos-weekly.sh` ejecuta el script con
+`--apply`, deja log en `~/Library/Logs/relevo-purge-photos.log` y avisa
+**siempre** con una notificación (OK con el recuento, o ERROR con el código):
+
+```bash
+# Prueba sin borrar nada
+DRY=1 scripts/launchd/purge-ticket-photos-weekly.sh
+# Instalar (solo en el Mac; el HP no lo ejecuta)
+cp scripts/launchd/com.blindbeds.relevo.purge-photos.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.blindbeds.relevo.purge-photos.plist
+# Quitar
+launchctl bootout gui/$(id -u)/com.blindbeds.relevo.purge-photos
 ```
+
+Requiere `SUPABASE_SERVICE_ROLE_KEY` en `.env.local` (fichero 600, fuera de
+git). Si el Mac está dormido el lunes, launchd lo lanza al despertar.
 
 ### Lo que no existe todavía
 

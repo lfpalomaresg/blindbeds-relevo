@@ -34,6 +34,8 @@ function setup(options: ConstructorParameters<typeof FakeSupabase>[0] = {}, prop
   return state.fake;
 }
 
+/** Llamadas a create_ticket (000013: los partes solo se crean por RPC). */
+const creates = (fake: FakeSupabase) => fake.rpcCalls.filter((c) => c.fn === "create_ticket");
 const submit = () => fireEvent.submit(screen.getByRole("button", { name: /crear parte/i }).closest("form")!);
 const type = (label: RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const pickPhoto = (file: File) => fireEvent.change(screen.getByLabelText(/foto/i), { target: { files: [file] } });
@@ -68,7 +70,7 @@ describe("TicketForm", () => {
     type(/título/i, "   ");
     submit();
     await screen.findByText(/título es obligatorio/i);
-    expect(fake.callsTo("maintenance_tickets", "insert")).toHaveLength(0);
+    expect(creates(fake)).toHaveLength(0);
   });
 
   it("falla cerrado sin sesión", async () => {
@@ -76,7 +78,7 @@ describe("TicketForm", () => {
     type(/título/i, "Grifo gotea");
     submit();
     await screen.findByText(/no hay sesión activa/i);
-    expect(fake.callsTo("maintenance_tickets", "insert")).toHaveLength(0);
+    expect(creates(fake)).toHaveLength(0);
     expect(fake.uploads).toHaveLength(0);
   });
 
@@ -87,17 +89,17 @@ describe("TicketForm", () => {
     type(/prioridad/i, "alta");
     submit();
     await screen.findByText(/parte de avería creado/i);
-    const [insert] = fake.callsTo("maintenance_tickets", "insert");
-    expect(insert.payload).toEqual({
-      org_id: ORG,
-      asset_id: null,
-      room_number: null,
-      title: "Grifo gotea",
-      description: null,
-      priority: "alta",
-      status: "abierto",
-      photo_path: null,
-      created_by: "user-staff",
+    const [insert] = creates(fake);
+    // Desde 000013 el parte se crea por RPC: created_by, status y cierre los
+    // fija la base de datos, la app ya no los envía.
+    expect(insert.args).toEqual({
+      p_org_id: ORG,
+      p_asset_id: null,
+      p_room_number: null,
+      p_title: "Grifo gotea",
+      p_description: null,
+      p_priority: "alta",
+      p_photo_path: null,
     });
     expect(onCreated).toHaveBeenCalledTimes(1);
   });
@@ -118,7 +120,7 @@ describe("TicketForm", () => {
     submit();
     expect((await screen.findByRole("alert")).textContent).toMatch(/10 MB/);
     expect(fake.uploads).toHaveLength(0);
-    expect(fake.callsTo("maintenance_tickets", "insert")).toHaveLength(0);
+    expect(creates(fake)).toHaveLength(0);
   });
 
   it("rechaza formatos que el bucket no admite", async () => {
@@ -143,8 +145,8 @@ describe("TicketForm", () => {
     expect(path).toMatch(new RegExp(`^${ORG}/[0-9a-f-]{36}\\.png$`));
     expect(options).toMatchObject({ contentType: "image/png" });
 
-    const [insert] = fake.callsTo("maintenance_tickets", "insert");
-    expect((insert.payload as { photo_path: string }).photo_path).toBe(path);
+    const [insert] = creates(fake);
+    expect((insert.args as { p_photo_path: string }).p_photo_path).toBe(path);
   });
 
   it("rechaza un fichero que dice ser JPEG pero no lo es, sin subir nada", async () => {
@@ -154,7 +156,7 @@ describe("TicketForm", () => {
     submit();
     await screen.findByText(/no es una foto válida/i);
     expect(fake.uploads).toHaveLength(0);
-    expect(fake.callsTo("maintenance_tickets", "insert")).toHaveLength(0);
+    expect(creates(fake)).toHaveLength(0);
   });
 
   it("si la subida falla, muestra el error y no crea el parte", async () => {
@@ -163,7 +165,7 @@ describe("TicketForm", () => {
     pickPhoto(makeFile(2048, "image/jpeg"));
     submit();
     await screen.findByText(/Bucket not found/);
-    expect(fake.callsTo("maintenance_tickets", "insert")).toHaveLength(0);
+    expect(creates(fake)).toHaveLength(0);
   });
 
   it("al escanear un QR resuelve el activo por qr_code y envía su id, no el texto del QR", async () => {
@@ -175,8 +177,8 @@ describe("TicketForm", () => {
     type(/título/i, "Grifo gotea");
     submit();
     await screen.findByText(/parte de avería creado/i);
-    const [insert] = fake.callsTo("maintenance_tickets", "insert");
-    expect((insert.payload as { asset_id: string }).asset_id).toBe(ASSET_ID);
+    const [insert] = creates(fake);
+    expect((insert.args as { p_asset_id: string }).p_asset_id).toBe(ASSET_ID);
 
     const lookup = fake.callsTo("ticket_assets", "select")[0];
     expect(lookup.filters).toEqual(expect.arrayContaining([["org_id", ORG], ["qr_code", "TEST-ALFA-101"]]));
@@ -191,12 +193,25 @@ describe("TicketForm", () => {
     type(/título/i, "Grifo gotea");
     submit();
     await screen.findByText(/parte de avería creado/i);
-    const [insert] = fake.callsTo("maintenance_tickets", "insert");
-    expect((insert.payload as { asset_id: unknown }).asset_id).toBeNull();
+    const [insert] = creates(fake);
+    expect((insert.args as { p_asset_id: unknown }).p_asset_id).toBeNull();
+  });
+
+  it("si create_ticket falla tras subir la foto, NO la borra desde el cliente (careo RPC R2)", async () => {
+    // Un error puede ser ambiguo (el parte se creó y se perdió la respuesta): borrar
+    // dejaría un parte sin foto. Si de verdad quedó huérfana, la quita el barrido
+    // del servidor a las 24 h (scripts/purge-ticket-photos.mjs).
+    const fake = setup({ rpcResults: { create_ticket: { data: null, error: { message: "network error" } } } });
+    type(/título/i, "Grifo gotea");
+    pickPhoto(makeFile(2048, "image/jpeg"));
+    submit();
+    await screen.findByText(/network error/i);
+    expect(fake.uploads).toHaveLength(1);
+    expect(fake.removed).toEqual([]);
   });
 
   it("muestra el error de la base de datos si el insert falla", async () => {
-    setup({ insertErrors: { maintenance_tickets: { message: "new row violates row-level security policy" } } });
+    setup({ rpcResults: { create_ticket: { data: null, error: { message: "new row violates row-level security policy" } } } });
     type(/título/i, "Grifo gotea");
     submit();
     await screen.findByText(/row-level security/i);
@@ -213,8 +228,8 @@ describe("TicketForm", () => {
     type(/título/i, "Grifo gotea");
     submit();
     await screen.findByText(/parte de avería creado/i);
-    const [insert] = fake.callsTo("maintenance_tickets", "insert");
-    expect((insert.payload as { asset_id: string }).asset_id).toBe(ASSET_ID);
+    const [insert] = creates(fake);
+    expect((insert.args as { p_asset_id: string }).p_asset_id).toBe(ASSET_ID);
   });
 
   it("un código manual que no existe en la organización se rechaza y no fija activo", async () => {
@@ -225,8 +240,8 @@ describe("TicketForm", () => {
     type(/título/i, "Grifo gotea");
     submit();
     await screen.findByText(/parte de avería creado/i);
-    const [insert] = fake.callsTo("maintenance_tickets", "insert");
-    expect((insert.payload as { asset_id: unknown }).asset_id).toBeNull();
+    const [insert] = creates(fake);
+    expect((insert.args as { p_asset_id: unknown }).p_asset_id).toBeNull();
   });
 
   it("un código manual vacío no consulta la base de datos", async () => {

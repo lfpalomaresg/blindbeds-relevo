@@ -30,6 +30,10 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
       "000008_handover_retention.sql",
       "000009_ticket_room_number.sql",
       "000010_ticket_author_emails.sql",
+      "000011_grants.sql",
+      "000012_ticket_guard.sql",
+      "000013_ticket_rpc.sql",
+      "000014_handover_item_rpc.sql",
     ]);
   });
 });

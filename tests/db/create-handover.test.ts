@@ -5,7 +5,8 @@
  * Antes: el formulario hacía dos inserts sueltos (shift_handovers y luego
  * handover_items). Si el segundo fallaba, quedaba una cabecera de relevo sin
  * items. Ahora `create_handover` inserta ambos en una sola llamada (una sola
- * transacción) y con los permisos del usuario (security invoker → RLS aplica).
+ * transacción). Desde 000014 es security definer: comprueba la membresía activa
+ * con get_user_org_ids() y la app ya no tiene INSERT directo en esas tablas.
  *
  * Las llamadas que deben dejar huella se hacen en AUTOCOMMIT (sin la
  * transacción revertida de `runAs`) y se mira el estado confirmado como
@@ -135,19 +136,14 @@ describe.skipIf(!available)("create_handover: cabecera + items en una sola trans
     expect(await errorCodeAs(owner, ANON, CALL, [ORG_A, DEPT, "tarde", items])).toBe(RLS_VIOLATION);
   });
 
-  it("contraste: el patrón antiguo (dos inserts sueltos) SÍ deja una cabecera huérfana si falla el item", async () => {
-    const h = await autocommitAs(
-      staffA,
-      `insert into public.shift_handovers (org_id, department, shift_type, created_by) values ($1, $2, 'noche', $3) returning id`,
-      [ORG_A, DEPT, staffA.userId],
-    );
+  it("el patrón antiguo (dos inserts sueltos) ya no es posible: 000014 quita la escritura directa", async () => {
     await expect(
       autocommitAs(
         staffA,
-        `insert into public.handover_items (handover_id, org_id, block, content) values ($1, $2, 'inventado', 'x')`,
-        [h.rows[0].id, ORG_A],
+        `insert into public.shift_handovers (org_id, department, shift_type, created_by) values ($1, $2, 'noche', $3) returning id`,
+        [ORG_A, DEPT, staffA.userId],
       ),
-    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
-    expect(await committedCounts()).toEqual({ handovers: 1, items: 0 });
+    ).rejects.toMatchObject({ code: RLS_VIOLATION });
+    expect(await committedCounts()).toEqual({ handovers: 0, items: 0 });
   });
 });

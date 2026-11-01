@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Retención semanal de fotos de averías de Relevo (lunes 09:30, hora local).
+  Instalar (solo en el Mac, no en el HP):
+    cp scripts/launchd/com.blindbeds.relevo.purge-photos.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.blindbeds.relevo.purge-photos.plist
+  Si el Mac está dormido a esa hora, launchd lo ejecuta al despertar.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.blindbeds.relevo.purge-photos</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/pifanmac/MAIN_PROYECTOS/blindbeds-relevo/scripts/launchd/purge-ticket-photos-weekly.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>StandardErrorPath</key>
+  <string>/Users/pifanmac/Library/Logs/relevo-purge-photos.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

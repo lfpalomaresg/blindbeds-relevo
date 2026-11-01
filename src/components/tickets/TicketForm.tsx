@@ -156,19 +156,22 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
       photoPath = filePath;
     }
 
-    const { error: insertError } = await supabase.from("maintenance_tickets").insert({
-      org_id: orgId,
-      asset_id: validated.value.assetId,
-      room_number: validated.value.roomNumber,
-      title: validated.value.title,
-      description: validated.value.description,
-      priority: validated.value.priority,
-      status: "abierto",
-      photo_path: photoPath,
-      created_by: userData.user.id,
+    // Migración 000013: los partes solo se crean por RPC. La base de datos fija
+    // created_by (la sesión), status 'abierto' y deja el cierre vacío.
+    const { error: insertError } = await supabase.rpc("create_ticket", {
+      p_org_id: orgId,
+      p_asset_id: validated.value.assetId,
+      p_room_number: validated.value.roomNumber,
+      p_title: validated.value.title,
+      p_description: validated.value.description,
+      p_priority: validated.value.priority,
+      p_photo_path: photoPath,
     });
 
     if (insertError) {
+      // La foto NO se borra aquí: el error puede ser ambiguo (el parte se creó y
+      // se perdió la respuesta). Si quedó huérfana, el barrido del servidor la
+      // borra a las 24 h (scripts/purge-ticket-photos.mjs).
       setError(insertError.message);
       setSaving(false);
       return;

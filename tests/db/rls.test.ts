@@ -37,7 +37,6 @@ const outsider = asUser("99999999-0000-0000-0000-000000000099");
 const HANDOVER_A = "10000000-0000-0000-0000-00000000000a";
 const HANDOVER_B = "10000000-0000-0000-0000-00000000000b";
 const ITEM_A = "20000000-0000-0000-0000-00000000000a";
-const ITEM_B = "20000000-0000-0000-0000-00000000000b";
 const ASSET_A = "30000000-0000-0000-0000-00000000000a";
 const ASSET_B = "30000000-0000-0000-0000-00000000000b";
 const TICKET_A = "40000000-0000-0000-0000-00000000000a";
@@ -186,40 +185,27 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (todas las migraciones)
     });
   });
 
-  describe("shift_handovers", () => {
+  // Desde 000014 los relevos solo se crean con create_handover() (definer,
+  // create-handover.test.ts / ticket-rpc.test.ts): ninguna escritura directa.
+  describe("shift_handovers (sin escritura directa, 000014)", () => {
     const insert = `insert into public.shift_handovers (org_id, department, shift_type, created_by) values ($1, 'recepcion', 'noche', $2)`;
 
-    it("staff crea un handover en su org firmado por sí mismo", async () => {
-      expect(await errorCodeAs(db, staffA, insert, [ORG_A, staffA.userId])).toBeNull();
-    });
-
-    it("staff no puede firmar el handover como otro usuario", async () => {
-      expect(await errorCodeAs(db, staffA, insert, [ORG_A, adminA.userId])).toBe(RLS_VIOLATION);
-    });
-
-    it("staff no puede crear handovers en otra org", async () => {
-      expect(await errorCodeAs(db, staffA, insert, [ORG_B, staffA.userId])).toBe(RLS_VIOLATION);
-    });
-
-    it("anon y usuarios sin membership no pueden insertar", async () => {
-      expect(await errorCodeAs(db, ANON, insert, [ORG_A, staffA.userId])).toBe(RLS_VIOLATION);
-      expect(await errorCodeAs(db, outsider, insert, [ORG_A, outsider.userId])).toBe(RLS_VIOLATION);
-    });
-
-    it("nadie puede actualizar ni borrar handovers (no hay policy): 0 filas afectadas", async () => {
+    it("nadie inserta, actualiza ni borra relevos directamente", async () => {
       for (const actor of [staffA, supervisorA, adminA]) {
-        expect(await rowCountAs(db, actor, `update public.shift_handovers set read_by = $1 where id = $2`, [actor.userId, HANDOVER_A])).toBe(0);
-        expect(await rowCountAs(db, actor, `delete from public.shift_handovers where id = $1`, [HANDOVER_A])).toBe(0);
+        expect(await errorCodeAs(db, actor, insert, [ORG_A, actor.userId])).toBe(RLS_VIOLATION);
+        expect(await errorCodeAs(db, actor, `update public.shift_handovers set read_by = $1 where id = $2`, [actor.userId, HANDOVER_A])).toBe(RLS_VIOLATION);
+        expect(await errorCodeAs(db, actor, `delete from public.shift_handovers where id = $1`, [HANDOVER_A])).toBe(RLS_VIOLATION);
       }
+      expect(await errorCodeAs(db, ANON, insert, [ORG_A, staffA.userId])).toBe(RLS_VIOLATION);
     });
   });
 
   describe("handover_items", () => {
     const insert = `insert into public.handover_items (handover_id, org_id, block, content) values ($1, $2, 'avisos', 'test')`;
 
-    it("cualquier miembro inserta items en su org", async () => {
+    it("nadie inserta items directamente, ni en su org (000014: solo create_handover)", async () => {
       for (const actor of [staffA, supervisorA, adminA]) {
-        expect(await errorCodeAs(db, actor, insert, [HANDOVER_A, ORG_A])).toBeNull();
+        expect(await errorCodeAs(db, actor, insert, [HANDOVER_A, ORG_A])).toBe(RLS_VIOLATION);
       }
     });
 
@@ -228,20 +214,14 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (todas las migraciones)
       expect(await errorCodeAs(db, outsider, insert, [HANDOVER_A, ORG_A])).toBe(RLS_VIOLATION);
     });
 
-    it("staff resuelve items de su org", async () => {
-      expect(await rowCountAs(db, staffA, `update public.handover_items set resolved = true, resolved_by = $1 where id = $2`, [staffA.userId, ITEM_A])).toBe(1);
-    });
-
-    it("staff no puede resolver items de otra org (RLS los oculta)", async () => {
-      expect(await rowCountAs(db, staffA, `update public.handover_items set resolved = true where id = $1`, [ITEM_B])).toBe(0);
-    });
-
-    it("no se puede mover un item a otra org vía update", async () => {
-      expect(await errorCodeAs(db, adminA, `update public.handover_items set org_id = $1 where id = $2`, [ORG_B, ITEM_A])).toBe(RLS_VIOLATION);
-    });
-
-    it("nadie borra items (sin policy de delete)", async () => {
-      expect(await rowCountAs(db, adminA, `delete from public.handover_items where id = $1`, [ITEM_A])).toBe(0);
+    // Desde 000014 resolver es resolve_handover_item() (ticket-rpc.test.ts): la
+    // app no actualiza ni borra items directamente, ni en su org ni en otra.
+    it("nadie actualiza ni borra items directamente (000014)", async () => {
+      for (const actor of [staffA, adminA]) {
+        expect(await errorCodeAs(db, actor, `update public.handover_items set resolved = true, resolved_by = $1 where id = $2`, [actor.userId, ITEM_A])).toBe(RLS_VIOLATION);
+        expect(await errorCodeAs(db, actor, `update public.handover_items set org_id = $1 where id = $2`, [ORG_B, ITEM_A])).toBe(RLS_VIOLATION);
+        expect(await errorCodeAs(db, actor, `delete from public.handover_items where id = $1`, [ITEM_A])).toBe(RLS_VIOLATION);
+      }
     });
   });
 
@@ -287,59 +267,29 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (todas las migraciones)
     });
   });
 
-  describe("maintenance_tickets", () => {
-    const insert = `insert into public.maintenance_tickets (org_id, title, created_by) values ($1, 'Luz fundida', $2)`;
-
-    it("cualquier miembro abre partes en su org firmados por sí mismo", async () => {
+  // Desde 000013 la app no escribe maintenance_tickets ni ticket_updates: crear
+  // es create_ticket() y cambiar estado change_ticket_status() (tests en
+  // ticket-rpc.test.ts). Aquí se fija que la escritura directa está cerrada
+  // para TODOS los roles de la app; RLS de lectura no cambia.
+  describe("maintenance_tickets (sin escritura directa, 000013)", () => {
+    it("ningún miembro inserta, actualiza ni borra partes directamente", async () => {
       for (const actor of [staffA, supervisorA, adminA]) {
-        expect(await errorCodeAs(db, actor, insert, [ORG_A, actor.userId])).toBeNull();
+        expect(await errorCodeAs(db, actor, `insert into public.maintenance_tickets (org_id, title, created_by) values ($1, 'Luz fundida', $2)`, [ORG_A, actor.userId])).toBe(RLS_VIOLATION);
+        expect(await errorCodeAs(db, actor, `update public.maintenance_tickets set status = 'en_curso' where id = $1`, [TICKET_A])).toBe(RLS_VIOLATION);
+        expect(await errorCodeAs(db, actor, `delete from public.maintenance_tickets where id = $1`, [TICKET_A])).toBe(RLS_VIOLATION);
       }
     });
 
-    it("no se puede abrir un parte a nombre de otro ni en otra org", async () => {
-      expect(await errorCodeAs(db, staffA, insert, [ORG_A, supervisorA.userId])).toBe(RLS_VIOLATION);
-      expect(await errorCodeAs(db, staffA, insert, [ORG_B, staffA.userId])).toBe(RLS_VIOLATION);
-      expect(await errorCodeAs(db, outsider, insert, [ORG_A, outsider.userId])).toBe(RLS_VIOLATION);
-    });
-
-    it("cualquier miembro cambia el estado de partes de su org, no de otras", async () => {
-      const update = `update public.maintenance_tickets set status = 'en_curso' where id = $1`;
-      expect(await rowCountAs(db, staffA, update, [TICKET_A])).toBe(1);
-      expect(await rowCountAs(db, staffA, update, [TICKET_B])).toBe(0);
-      expect(await rowCountAs(db, staffB, update, [TICKET_A])).toBe(0);
-    });
-
-    it("no se puede mover un parte a otra org vía update (with check)", async () => {
-      expect(await errorCodeAs(db, adminA, `update public.maintenance_tickets set org_id = $1 where id = $2`, [ORG_B, TICKET_A])).toBe(RLS_VIOLATION);
-    });
-
-    it("el check de estado rechaza valores fuera del catálogo", async () => {
-      expect(await errorCodeAs(db, staffA, `update public.maintenance_tickets set status = 'perdido' where id = $1`, [TICKET_A])).toBe("23514");
-    });
-
-    it("nadie borra partes (sin policy de delete)", async () => {
-      expect(await rowCountAs(db, adminA, `delete from public.maintenance_tickets where id = $1`, [TICKET_A])).toBe(0);
+    it("los partes de otra org siguen sin verse", async () => {
+      expect(await countAs(db, staffA, "maintenance_tickets", `id = '${TICKET_B}'`)).toBe(0);
     });
   });
 
-  describe("ticket_updates", () => {
-    const insert = `insert into public.ticket_updates (ticket_id, status_from, status_to, created_by) values ($1, 'abierto', 'en_curso', $2)`;
-
-    it("miembro registra un cambio en un parte de su org", async () => {
-      expect(await errorCodeAs(db, staffA, insert, [TICKET_A, staffA.userId])).toBeNull();
-    });
-
-    it("no se puede registrar un cambio en un parte de otra org", async () => {
-      expect(await errorCodeAs(db, staffA, insert, [TICKET_B, staffA.userId])).toBe(RLS_VIOLATION);
-    });
-
-    it("no se puede firmar el cambio como otro usuario", async () => {
-      expect(await errorCodeAs(db, staffA, insert, [TICKET_A, adminA.userId])).toBe(RLS_VIOLATION);
-    });
-
-    it("el historial es inmutable: update y delete afectan 0 filas", async () => {
-      expect(await rowCountAs(db, adminA, `update public.ticket_updates set comment = 'x' where ticket_id = $1`, [TICKET_A])).toBe(0);
-      expect(await rowCountAs(db, adminA, `delete from public.ticket_updates where ticket_id = $1`, [TICKET_A])).toBe(0);
+  describe("ticket_updates (sin escritura directa, 000013)", () => {
+    it("ningún miembro escribe el historial directamente: solo change_ticket_status", async () => {
+      expect(await errorCodeAs(db, staffA, `insert into public.ticket_updates (ticket_id, status_from, status_to, created_by) values ($1, 'abierto', 'en_curso', $2)`, [TICKET_A, staffA.userId])).toBe(RLS_VIOLATION);
+      expect(await errorCodeAs(db, adminA, `update public.ticket_updates set comment = 'x' where ticket_id = $1`, [TICKET_A])).toBe(RLS_VIOLATION);
+      expect(await errorCodeAs(db, adminA, `delete from public.ticket_updates where ticket_id = $1`, [TICKET_A])).toBe(RLS_VIOLATION);
     });
   });
 

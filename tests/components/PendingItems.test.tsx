@@ -47,20 +47,23 @@ describe("PendingItems", () => {
     expect(query.filters).toEqual(expect.arrayContaining([["org_id", ORG], ["resolved", false]]));
   });
 
-  it("«Resolver» marca el item con el usuario y lo quita de la lista", async () => {
+  // Desde 000014 se resuelve con resolve_handover_item(): quién y cuándo los
+  // fija la base de datos; la app ya no hace UPDATE directo.
+  const resolves = (fake: FakeSupabase) => fake.rpcCalls.filter((c) => c.fn === "resolve_handover_item");
+
+  it("«Resolver» llama a resolve_handover_item y lo quita de la lista", async () => {
     const fake = setup({ user: { id: "user-sup" } });
     await screen.findByText(/Revisar minibar 101/);
     fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
     await waitFor(() => expect(screen.queryByText(/Revisar minibar 101/)).toBeNull());
-    const [update] = fake.callsTo("handover_items", "update");
-    expect(update.payload).toMatchObject({ resolved: true, resolved_by: "user-sup", resolved_at: expect.any(String) });
-    expect(update.filters).toEqual([["id", "i1"], ["resolved", false]]);
+    expect(resolves(fake)).toEqual([{ fn: "resolve_handover_item", args: { p_item_id: "i1" } }]);
+    expect(fake.callsTo("handover_items", "update")).toHaveLength(0);
     expect(screen.getByText(/Fuga en 204/)).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("si la base de datos rechaza la resolución, el pendiente sigue visible y se avisa", async () => {
-    setup({ user: { id: "user-sup" }, updateErrors: { handover_items: { message: "permission denied" } } });
+    setup({ user: { id: "user-sup" }, rpcResults: { resolve_handover_item: { data: null, error: { message: "permission denied" } } } });
     await screen.findByText(/Revisar minibar 101/);
     fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
     await screen.findByRole("alert");
@@ -68,19 +71,9 @@ describe("PendingItems", () => {
     expect(screen.getByText(/Revisar minibar 101/)).toBeTruthy();
   });
 
-  it("no vuelve a firmar un pendiente que otra persona ya resolvió", async () => {
-    const fake = setup({ user: { id: "user-sup" } });
+  it("si ya estaba resuelto por otra persona (la RPC devuelve false), lo quita de la lista y lo indica", async () => {
+    setup({ user: { id: "user-sup" }, rpcResults: { resolve_handover_item: { data: false, error: null } } });
     await screen.findByText(/Revisar minibar 101/);
-    fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
-    await waitFor(() => expect(fake.callsTo("handover_items", "update")).toHaveLength(1));
-    const [update] = fake.callsTo("handover_items", "update");
-    expect(update.filters).toEqual([["id", "i1"], ["resolved", false]]);
-  });
-
-  it("si ya estaba resuelto por otra persona, lo quita de la lista y lo indica", async () => {
-    const fake = setup({ user: { id: "user-sup" } });
-    await screen.findByText(/Revisar minibar 101/);
-    fake.options.tables!.handover_items = ITEMS.map((i) => (i.id === "i1" ? { ...i, resolved: true } : i));
     fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
     await screen.findByRole("status");
     expect(screen.getByRole("status").textContent).toMatch(/ya estaba resuelto/i);
@@ -92,7 +85,7 @@ describe("PendingItems", () => {
     await screen.findByText(/Revisar minibar 101/);
     fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
     await waitFor(() => expect(fake.auth.getUser).toHaveBeenCalled());
-    expect(fake.callsTo("handover_items", "update")).toHaveLength(0);
+    expect(resolves(fake)).toHaveLength(0);
     expect(screen.getByText(/Revisar minibar 101/)).toBeTruthy();
   });
 });

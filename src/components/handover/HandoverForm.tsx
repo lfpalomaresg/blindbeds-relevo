@@ -67,8 +67,9 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
       return;
     }
 
-    // Cabecera + items en una sola transacción (migración 000006): si algo
-    // falla no queda un relevo a medias. RLS aplica (security invoker).
+    // Cabecera + items en una sola transacción (000006): si algo falla no queda
+    // un relevo a medias. Desde 000014 es security definer: la base comprueba
+    // la membresía activa y fija el autor; la app no escribe las tablas.
     const { error: rpcError } = await supabase.rpc("create_handover", {
       p_org_id: orgId,
       p_department: validated.value.department,

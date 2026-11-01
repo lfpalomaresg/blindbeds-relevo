@@ -38,19 +38,18 @@ export function PendingItems({ orgId }: PendingItemsProps) {
 
     setError("");
     setNotice("");
-    // Solo los no resueltos: si otra persona ya lo resolvió, no se pisa quién y cuándo.
-    const { data: changed, error: updateError } = await supabase
-      .from("handover_items")
-      .update({ resolved: true, resolved_by: userData.user.id, resolved_at: new Date().toISOString() })
-      .eq("id", id)
-      .eq("resolved", false)
-      .select("id");
+    // Migración 000014: resolve_handover_item fija quién y cuándo en la base de
+    // datos y solo actúa si no estaba resuelto (devuelve false si otra persona
+    // se adelantó). La app ya no hace UPDATE directo.
+    const { data: changed, error: updateError } = await supabase.rpc("resolve_handover_item", {
+      p_item_id: id,
+    });
 
     if (updateError) {
       setError("No se pudo resolver el pendiente: " + updateError.message);
       return;
     }
-    if (!changed || changed.length === 0) {
+    if (changed !== true) {
       setNotice("Ese pendiente ya estaba resuelto por otra persona.");
     }
 
