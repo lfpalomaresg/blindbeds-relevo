@@ -4,6 +4,132 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-02 — Subdominio relevo.blindbeds.com y retención programada (Claude Code)
+
+**Hecho**
+- Vercel: `relevo.blindbeds.com` asignado al proyecto `blindbeds-relevo` (`vercel domains add`); TLS emitido. `/` → 307 → `/login` → 200.
+- DNS (Arsys, Panel de Control → Entradas DNS): `A relevo.blindbeds.com → 76.76.21.21`, igual que appcc y audit. Arsys exige el nombre completo, no solo `relevo`.
+- Supabase `relevo` → Authentication → URL Configuration: Site URL `https://relevo.blindbeds.com`; Redirect URLs + `https://relevo.blindbeds.com/**` (se conservan localhost y las dos de vercel.app). El login usa `window.location.origin`, así que el enlace mágico vuelve al host desde el que se pidió.
+- pg_cron activado y tarea `relevo-purge-expired-handovers` (`15 3 * * *`, activa) programada desde el SQL Editor (runbook § Retención de relevos). Verificado con `select jobname, schedule, active from cron.job`.
+- Cuenta: el proyecto `relevo` NO está en la cuenta de los MCP/CLI (la que entra por GitHub); hay que entrar con email + contraseña de la segunda cuenta del operador.
+
+**Pendiente**
+- Migraciones 000011→000014 en producción + `vercel --prod` (rama `fix/relevo-rpc-only-2026-11-01`, sin push).
+- Smoke real del enlace mágico desde `relevo.blindbeds.com` (iOS/Android).
+- launchd de retención de fotos (operador).
+
+**Decidido**
+- Registro A (no CNAME) para homogeneidad con el resto de subdominios.
+
+## 2026-11-01 — Relevo en la nube (opencode) + revisión y arreglos (Claude Code)
+
+**Hecho (opencode, `cloud-agentic`, commits `45389ed`→`ff331f9` directos a main)** ·
+Supabase nuevo `relevo` (`zlwpqucwudygqnghdaxb`, Frankfurt, Free, cuenta
+la segunda cuenta Supabase del operador, no la de los MCP) con 000001–000010 + seed demo; Vercel
+`blindbeds-relevo` → https://blindbeds-relevo.vercel.app (prod pública,
+previews protegidos). 000009 habitación/zona (activo y QR opcionales), foto con
+cámara/galería y vista previa, `/tickets/[id]` con historial, 000010
+`ticket_author_emails`, `scripts/purge-ticket-photos.mjs`, undici/zod.
+
+**Hecho (Claude Code, revisión)** · Hallado: el 42501 se arregló en producción
+con `grant all on all tables/sequences/functions in schema public to anon,
+authenticated, service_role` A MANO → repo ≠ producción y REVOKE deshechos
+(anon ejecutaba `handover_author_emails`, comprobado por REST; 000010 sí quedó
+bien porque se aplicó después). Arreglo: `000011_grants.sql` (grants de tablas
+y secuencias + ACL de diseño de cada función + sin EXECUTE implícito para anon
+en funciones futuras; idempotente). Test `tests/db/grants.test.ts` visto en
+ROJO (4/5) → verde; suite 621/621, tipos y lint limpios. Retención de fotos:
+`scripts/launchd/` (semanal, lunes 09:30, notificación OK/ERROR, probado en
+simulación contra producción y en el camino de error). Docs: runbook §
+Retención de fotos y activación § 3 (tabla de migraciones + aviso).
+
+**Careo Codex nivel 1** (`7e324ed..HEAD` + working tree). R1 NO APTO, 7
+hallazgos; los dos ALTOS venían del baseline (policy `tickets_update` sin
+límite de columnas), agravados por el purgador con service_role y 000010:
+(1) un miembro podía apuntar `photo_path` a una foto de OTRA org y el purgador
+la borraría; (2) cambiar `created_by`/`closed_by` al UUID de un usuario de otra
+org y leer su email (fuga demostrada en test, visto en rojo). Arreglos: 000012
+(trigger de columnas protegidas + CHECK de ruta de foto, que cubre también el
+INSERT + CHECK de `room_number`), 000011 revoca EXECUTE a anon en todas las
+funciones, purgador con validación de ruta por org y paginación, TicketForm
+borra la foto si falla el insert. R2 NO APTO (4 medios/bajos): purgador por
+lotes completos (solo vacía lo que Storage confirma), barrido de huérfanas en
+servidor (> 24 h, sin parte), trigger con coherencia de cierre (cerrado es
+final; cerrar = auth.uid() + now(); fuera de cerrado, campos de cierre NULL) y
+CHECK `NOT VALID` + `VALIDATE` que no aborta sobre datos antiguos. 646/646
+tests. R3 NO APTO: (ALTA) el trigger solo cubría UPDATE → un INSERT directo con
+`status='cerrado'` y `closed_by` ajeno reabría la fuga de emails; (MEDIA)
+carrera en el barrido entre snapshot y borrado. Arreglados después de R3
+(trigger `BEFORE INSERT OR UPDATE`: un parte nace abierto y sin cierre;
+re-comprobación de referencias antes de cada lote y paginación por cursor),
+tests vistos en rojo → 649/649. Tope de 3 rondas alcanzado sin APTO. Patrón
+de fondo: cada ronda encuentra un hueco nuevo en la misma superficie
+(escritura directa del cliente sobre `maintenance_tickets` con policies
+amplias). **Decisión del operador (02/11): rediseño acotado** → `000013_ticket_rpc.sql`:
+partes solo por `create_ticket` / `change_ticket_status` (definer, membresía
+explícita); sin INSERT/UPDATE/DELETE de la app en partes e historial; 000012
+queda como segunda barrera (sus tests reabren permisos a propósito).
+TicketForm usa la RPC. Hallado de paso: `has_table_privilege` con varios
+privilegios es «alguno», el test de grants era más débil de lo que parecía →
+ahora privilegio a privilegio. 649/649 tests + **34/34 e2e** contra Supabase
+local. Careo nuevo sobre el diseño por RPC — R1 NO APTO pero **sin ninguna vía
+de cruce entre hoteles**; 3 medios dentro del hotel: foto reutilizable en dos
+partes (el purgador borraría la de un parte activo), carrera del barrido, y
+`handover_items` reescribible por cualquier miembro. Arreglo: `create_ticket`
+exige que la foto exista en Storage, sea de quien llama (`owner_id`) y tenga
+< 12 h + índice único de `photo_path` (cierra también la carrera: lo que el
+barrido borra tiene > 24 h y ya no se puede enlazar); `000014` →
+`resolve_handover_item` y sin UPDATE/DELETE directo en `handover_items`.
+650/650 + 34/34 e2e (01-guion sube foto real: `owner_id` comprobado con Storage
+local). R2 NO APTO (2 medios, ninguno entre hoteles): el INSERT directo en
+relevos seguía abierto → `create_handover` a definer y sin escritura directa
+en `shift_handovers`/`handover_items`; y TicketForm borraba la foto ante un
+error que podía ser ambiguo (parte creado, respuesta perdida) → ya no borra,
+lo hace el barrido a las 24 h. 647/647 + 34/34 e2e. **R3 APTO**: sin vías
+entre hoteles ni escritura directa indebida (organizations solo lectura,
+memberships/ticket_assets solo admin de su hotel, resto solo por RPC).
+Pendiente bajo: límites de servidor en `create_handover` (≤ 4 ítems, 1 por
+bloque, contenido ≤ 2000) — la UI ya los aplica.
+
+**Pendiente (operador)** · Aplicar 000011, 000012 y 000013 en producción, en
+ese orden, y desplegar justo después (la app nueva crea partes con
+`create_ticket`; la vieja, con INSERT directo, deja de poder crear):
+
+```bash
+cd ~/MAIN_PROYECTOS/blindbeds-relevo
+for f in 000011_grants 000012_ticket_guard 000013_ticket_rpc 000014_handover_item_rpc; do
+  psql "postgresql://postgres@db.zlwpqucwudygqnghdaxb.supabase.co:5432/postgres" \
+    -v ON_ERROR_STOP=1 -1 -f supabase/migrations/$f.sql || break   # pide la contraseña (Bitwarden)
+done
+```
+
+Antes de dar datos reales, auditar `created_by`/`closed_by` heredados de la
+ventana del `grant all` (en Supabase → SQL Editor; hoy hay 0 partes):
+
+```sql
+select t.id, t.org_id, 'created_by' as col, t.created_by as user_id from public.maintenance_tickets t
+ where not exists (select 1 from public.memberships m where m.org_id = t.org_id and m.user_id = t.created_by)
+union all
+select t.id, t.org_id, 'closed_by', t.closed_by from public.maintenance_tickets t
+ where t.closed_by is not null
+   and not exists (select 1 from public.memberships m where m.org_id = t.org_id and m.user_id = t.closed_by);
+```
+
+Pendiente técnico (bajo): validación de bytes de la foto en servidor;
+`ALTER DEFAULT PRIVILEGES FOR ROLE <propietario real>` (comprobar el
+propietario de las funciones en producción).
+
+Instalar el launchd (runbook) · pg_cron de `purge_expired_handovers` · decidir
+4ª puerta en web-blindbeds.
+
+**Decidido** · Grants de tablas iguales a un Supabase estándar (RLS decide las
+filas). La retención de fotos va en el Mac (necesita `service_role`, nunca en
+cron público). Columnas protegidas por trigger y no por GRANT de columnas,
+para que aguanten otro `grant all` manual. Migraciones y despliegue van juntos
+(000013 ↔ TicketForm con `create_ticket`).
+
+---
+
 ## 2026-10-27 — Sprint 2 del MVP (R3, R4b, R4c, minimización, R5)
 
 **Hecho** · Rama local `mvp/sprint2-2026-10-27` (sin push). R3: `/handover`

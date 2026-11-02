@@ -96,6 +96,14 @@ sale con 1 en vez de decir «Setup completo».
 | `000004_org_scoped_fks.sql` | `unique (id, org_id)` + FK compuestas anti-cruce de organizaciones; añade `ticket_updates.org_id`. |
 | `000005_change_ticket_status.sql` | Función `change_ticket_status`: estado + traza en `ticket_updates` en una sola transacción (`security invoker`). |
 | `000006_create_handover.sql` | Función `create_handover`: cabecera del relevo + items en una sola transacción (`security invoker`). |
+| `000007`–`000010` | Emails de autores, retención de relevos, habitación/zona del parte. |
+| `000011_grants.sql` | GRANT de tablas/secuencias y ACL de diseño de TODAS las funciones (anon solo ejecuta los helpers de RLS). **Imprescindible** si el proyecto se creó con «exponer tablas nuevas» desactivado (sin ella: `42501 permission denied`). Idempotente. |
+| `000012_ticket_guard.sql` | Trigger que fija `org_id`, `created_by`, `created_at` y `photo_path` del parte para los usuarios de la app (`closed_by` = quien cierra, `closed_at` = ahora); CHECK de ruta de foto `{org_id}/{uuid}.(jpg\|png\|webp)` y de `room_number` limpio. Idempotente. |
+| `000013_ticket_rpc.sql` | **Partes solo por RPC**: `create_ticket` (nueva) y `change_ticket_status` (pasa a security definer) comprueban la membresía y fijan autor, estado y cierre; la app pierde INSERT/UPDATE/DELETE en `maintenance_tickets` y `ticket_updates`. La versión de la app que llama a `create_ticket` necesita esta migración (y viceversa): aplicar y desplegar seguidos. Tras reaplicar 000011, reaplicar 000013 y 000014. |
+| `000014_handover_item_rpc.sql` | **Relevos solo por RPC**: `create_handover` pasa a security definer con membresía explícita (los ítems nacen sin resolver) y `resolve_handover_item` (nueva) fija quién y cuándo; la app pierde INSERT/UPDATE/DELETE en `shift_handovers` y `handover_items`. Igual que 000013: aplicar y desplegar seguidos. |
+
+No pegar nunca `grant all on all functions in schema public to anon`: deshace
+los REVOKE de las funciones (pasó en `relevo` el 01/11/2026; lo corrige 000011).
 
 No existe `000002` en esta carpeta a propósito (es la variante de abajo).
 `000003`, `000004`, `000005` y `000006` son idempotentes: se pueden volver a aplicar.

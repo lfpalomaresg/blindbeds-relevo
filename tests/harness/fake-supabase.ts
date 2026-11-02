@@ -116,6 +116,7 @@ export class FakeSupabase {
   calls: RecordedCall[] = [];
   uploads: UploadCall[] = [];
   signedUrls: SignedUrlCall[] = [];
+  removed: { bucket: string; paths: string[] }[] = [];
 
   constructor(public options: FakeSupabaseOptions = {}) {}
 
@@ -143,6 +144,10 @@ export class FakeSupabase {
         this.uploads.push({ bucket, path, file, options });
         const error = this.options.uploadError ?? null;
         return { data: error ? null : { path }, error };
+      },
+      remove: async (paths: string[]) => {
+        this.removed.push({ bucket, paths });
+        return { data: [], error: null };
       },
       createSignedUrl: async (path: string, expiresIn: number) => {
         this.signedUrls.push({ bucket, path, expiresIn });

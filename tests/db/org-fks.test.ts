@@ -52,6 +52,10 @@ describe.skipIf(!available)("FK compuestas por organización (000004_org_scoped_
     pg = await startEphemeralPostgres();
     await bootstrap(pg);
     db = await pg.connect();
+    // Escenario «permisos reabiertos por error» (p. ej. otro `grant all` manual):
+    // desde 000013 la app no escribe estas tablas, pero esta barrera tiene que
+    // aguantar igualmente.
+    await db.query(`grant insert, update, delete on public.maintenance_tickets, public.ticket_updates, public.handover_items to anon, authenticated`);
   }, 120_000);
 
   afterAll(async () => {
