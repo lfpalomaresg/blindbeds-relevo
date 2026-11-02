@@ -14,9 +14,10 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 - Cuenta: el proyecto `relevo` NO está en la cuenta de los MCP/CLI (la que entra por GitHub); hay que entrar con email + contraseña de la segunda cuenta del operador.
 - PR #17 fusionada en main (`4760938`); 000011→000014 aplicadas en producción (verificado por SQL: trigger y CHECK validados, RPC definer, anon sin EXECUTE); Vercel desplegó producción desde main (proyecto enlazado a git, no hizo falta `vercel --prod`).
 - **Smoke real en móvil superado (10:15–10:24 UTC):** enlace mágico desde `relevo.blindbeds.com` → relevo → pendiente resuelto → parte con foto (3,0 MB en `ticket-photos/<org>/…`) → cerrado. Comprobado en la base: `create_handover`, `resolve_handover_item`, `create_ticket`, `change_ticket_status` y las policies de Storage funcionan con la base migrada. Las 2 filas `abierto→cerrado` de `ticket_updates` son de dos partes distintos (uno de pruebas del 01/11), no un duplicado. MVP §6: 8/8.
+- Alta pública cerrada: Authentication → Sign In / Providers → «Allow new users to sign up» OFF; verificado por `GET /auth/v1/settings` → `disable_signup: true`.
 
 **Pendiente**
-- launchd de retención de fotos (operador); apagar «Allow new users to sign up» (runbook §4).
+- launchd de retención de fotos (operador).
 - Opcional: repetir el smoke en el otro sistema móvil (iOS o Android) y ejercitar «en curso» en producción.
 
 **Decidido**
