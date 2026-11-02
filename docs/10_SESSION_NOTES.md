@@ -4,6 +4,23 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-02 — Subdominio relevo.blindbeds.com y retención programada (Claude Code)
+
+**Hecho**
+- Vercel: `relevo.blindbeds.com` asignado al proyecto `blindbeds-relevo` (`vercel domains add`); TLS emitido. `/` → 307 → `/login` → 200.
+- DNS (Arsys, Panel de Control → Entradas DNS): `A relevo.blindbeds.com → 76.76.21.21`, igual que appcc y audit. Arsys exige el nombre completo, no solo `relevo`.
+- Supabase `relevo` → Authentication → URL Configuration: Site URL `https://relevo.blindbeds.com`; Redirect URLs + `https://relevo.blindbeds.com/**` (se conservan localhost y las dos de vercel.app). El login usa `window.location.origin`, así que el enlace mágico vuelve al host desde el que se pidió.
+- pg_cron activado y tarea `relevo-purge-expired-handovers` (`15 3 * * *`, activa) programada desde el SQL Editor (runbook § Retención de relevos). Verificado con `select jobname, schedule, active from cron.job`.
+- Cuenta: el proyecto `relevo` NO está en la cuenta de los MCP/CLI (la que entra por GitHub); hay que entrar con email + contraseña de la segunda cuenta del operador.
+
+**Pendiente**
+- Migraciones 000011→000014 en producción + `vercel --prod` (rama `fix/relevo-rpc-only-2026-11-01`, sin push).
+- Smoke real del enlace mágico desde `relevo.blindbeds.com` (iOS/Android).
+- launchd de retención de fotos (operador).
+
+**Decidido**
+- Registro A (no CNAME) para homogeneidad con el resto de subdominios.
+
 ## 2026-11-01 — Relevo en la nube (opencode) + revisión y arreglos (Claude Code)
 
 **Hecho (opencode, `cloud-agentic`, commits `45389ed`→`ff331f9` directos a main)** ·

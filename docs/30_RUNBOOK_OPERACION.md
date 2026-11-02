@@ -198,7 +198,7 @@ cascada, sus bloques (resueltos o no). Devuelve cuántos relevos borró. Solo la
 pueden ejecutar el operador (SQL Editor), `service_role` o `pg_cron`; los
 usuarios de la app no.
 
-**La migración no programa nada.** Para activarla en un proyecto Supabase
+**La migración no programa nada.** En el proyecto `relevo` (producción) se activó el 02/11/2026 (`cron.job` → `relevo-purge-expired-handovers`, `15 3 * * *`). Para activarla en otro proyecto Supabase
 (una vez, con OK del operador y tras avisar al hotel del plazo):
 
 1. Dashboard → Database → Extensions → activar `pg_cron`.
