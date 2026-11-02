@@ -39,9 +39,9 @@ El operador da de alta la organización y los usuarios (SQL o runbook) → login
 | OUT | Clasificador de oficio con LLM (**PR #12 abierto, fuera del MVP**) · PMS · offline · informes PDF · multiidioma · selector de varios hoteles · push | — |
 
 ## 6. Criterios de aceptación (DoD)
-- [ ] Plantilla de email de Supabase y `emailRedirectTo` documentados en el runbook (enlace → `/auth/callback?code=…`); smoke con correo real: email nuevo → enlace → `/dashboard` con sesión, en iOS Safari y Android Chrome. Hasta ese smoke, R1 es «no verificado», no «roto».
+- [x] Plantilla de email de Supabase y `emailRedirectTo` documentados en el runbook (enlace → `/auth/callback?code=…`); smoke con correo real: email nuevo → enlace → `/dashboard` con sesión, en iOS Safari y Android Chrome. Hasta ese smoke, R1 es «no verificado», no «roto».
   - ✅ 28/10 documentado: `20_ACTIVACION_SUPABASE.md` §1 paso 5 (plantilla `token_hash` → `/auth/confirm`, válida en cualquier navegador) y §6 (smoke). Probado en local: `e2e/05-enlace-token-hash.spec.ts` y el login completo vía Mailpit (`e2e/01-guion.spec.ts`).
-  - ⏳ Falta el smoke con correo real en iOS y Android: exige un Supabase y un despliegue en la nube, que no existen (producto congelado).
+  - ✅ 02/11 smoke real superado en producción (`relevo.blindbeds.com`, móvil del operador, correo real): enlace mágico → `/dashboard` → relevo, pendiente resuelto, parte con foto, cierre; verificado en la base. Pendiente opcional: repetir en el segundo sistema (iOS o Android).
 - [x] Relevo de 4 bloques atómico: si falla un ítem, quedan 0 filas (test con Postgres efímero).
 - [x] El turno entrante ve el último relevo de su departamento con turno, autor y hora.
 - [x] Parte con foto JPEG ≤ 10 MB visible por URL firmada; otra organización → 403.
