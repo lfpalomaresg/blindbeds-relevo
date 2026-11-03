@@ -51,7 +51,7 @@ clientes/
 .env.local
 ~$*
 graphify-out/
-.claude/worktrees/
+.claude/
 .conclave/
 .playwright/
 
