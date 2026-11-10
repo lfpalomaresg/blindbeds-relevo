@@ -159,12 +159,14 @@ describe("TicketForm", () => {
     expect(creates(fake)).toHaveLength(0);
   });
 
-  it("si la subida falla, muestra el error y no crea el parte", async () => {
+  it("si la subida falla, muestra un error propio (sin el texto del servidor) y no crea el parte", async () => {
     const fake = setup({ uploadError: { message: "Bucket not found" } });
     type(/título/i, "Grifo gotea");
     pickPhoto(makeFile(2048, "image/jpeg"));
     submit();
-    await screen.findByText(/Bucket not found/);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no se pudo subir la foto/i);
+    expect(alert.textContent).not.toMatch(/Bucket/);
     expect(creates(fake)).toHaveLength(0);
   });
 
@@ -205,16 +207,30 @@ describe("TicketForm", () => {
     type(/título/i, "Grifo gotea");
     pickPhoto(makeFile(2048, "image/jpeg"));
     submit();
-    await screen.findByText(/network error/i);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/comprueba en el panel/i);
+    expect(alert.textContent).not.toMatch(/network error/i);
     expect(fake.uploads).toHaveLength(1);
     expect(fake.removed).toEqual([]);
   });
 
-  it("muestra el error de la base de datos si el insert falla", async () => {
-    setup({ rpcResults: { create_ticket: { data: null, error: { message: "new row violates row-level security policy" } } } });
+  it("si create_ticket falla, muestra un error propio y nunca el texto de la base de datos", async () => {
+    setup({ rpcResults: { create_ticket: { data: null, error: { code: "42501", message: "not a member of this organization" } } } });
     type(/título/i, "Grifo gotea");
     submit();
-    await screen.findByText(/row-level security/i);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/vuelve a iniciar sesión/i);
+    expect(alert.textContent).not.toMatch(/member|organization/);
+    expect(screen.getByRole("button", { name: /crear parte/i }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("un 22023 de create_ticket (app en caché antigua) se muestra traducido", async () => {
+    setup({ rpcResults: { create_ticket: { data: null, error: { code: "22023", message: "title must be 1..120 characters" } } } });
+    type(/título/i, "Grifo gotea");
+    submit();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/título/i);
+    expect(alert.textContent).not.toMatch(/must be/);
   });
 
   it("sin escáner: el código manual busca el activo por código en la organización y envía su id", async () => {
