@@ -71,13 +71,44 @@ describe("PendingItems", () => {
     expect(screen.getByText(/Revisar minibar 101/)).toBeTruthy();
   });
 
-  it("si ya estaba resuelto por otra persona (la RPC devuelve false), lo quita de la lista y lo indica", async () => {
-    setup({ user: { id: "user-sup" }, rpcResults: { resolve_handover_item: { data: false, error: null } } });
+  // La RPC devuelve false en dos casos distintos: otra persona se adelantó, o
+  // quien pulsa ya no tiene acceso (hotel suspendido, membresía retirada; RLS
+  // oculta entonces el ítem). La app vuelve a leer el ítem para distinguirlos.
+  const rpcFalse = { resolve_handover_item: { data: false, error: null } };
+
+  it("si ya estaba resuelto por otra persona (false y el ítem se lee resuelto), lo quita de la lista y lo indica", async () => {
+    const fake = setup({ user: { id: "user-sup" }, rpcResults: rpcFalse });
     await screen.findByText(/Revisar minibar 101/);
+    fake.options.tables = { handover_items: ITEMS.map((i) => (i.id === "i1" ? { ...i, resolved: true } : i)) };
     fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
     await screen.findByRole("status");
     expect(screen.getByRole("status").textContent).toMatch(/ya estaba resuelto/i);
     expect(screen.queryByText(/Revisar minibar 101/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    const recheck = fake.callsTo("handover_items", "select").at(-1);
+    expect(recheck?.filters).toEqual(expect.arrayContaining([["id", "i1"]]));
+  });
+
+  it("si el ítem ya no es visible (hotel suspendido o sin membresía), avisa del fallo y no lo da por resuelto", async () => {
+    const fake = setup({ user: { id: "user-sup" }, rpcResults: rpcFalse });
+    await screen.findByText(/Revisar minibar 101/);
+    fake.options.tables = { handover_items: [] };
+    fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert").textContent).toMatch(/no se pudo resolver/i);
+    expect(screen.getByRole("alert").textContent).toMatch(/acceso/i);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText(/Revisar minibar 101/)).toBeTruthy();
+  });
+
+  it("si la RPC devuelve false y el ítem sigue sin resolver, avisa del fallo y lo deja en la lista", async () => {
+    setup({ user: { id: "user-sup" }, rpcResults: rpcFalse });
+    await screen.findByText(/Revisar minibar 101/);
+    fireEvent.click(screen.getAllByRole("button", { name: /resolver/i })[0]);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert").textContent).toMatch(/no se pudo resolver/i);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText(/Revisar minibar 101/)).toBeTruthy();
   });
 
   it("sin sesión no intenta resolver nada", async () => {
