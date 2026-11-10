@@ -50,6 +50,20 @@ export function PendingItems({ orgId }: PendingItemsProps) {
       return;
     }
     if (changed !== true) {
+      // false cubre dos casos: otra persona lo resolvió antes, o quien pulsa ya
+      // no tiene acceso (hotel suspendido, membresía retirada). Se vuelve a
+      // leer el ítem: RLS lo oculta en el segundo caso.
+      const { data: current, error: readError } = await supabase
+        .from("handover_items")
+        .select("id, resolved")
+        .eq("id", id)
+        .maybeSingle();
+      if (readError || !current || (current as { resolved?: boolean }).resolved !== true) {
+        setError(
+          "No se pudo resolver el pendiente: puede que tu acceso a este hotel no esté activo. Recarga la página y, si sigue, avisa al responsable del hotel.",
+        );
+        return;
+      }
       setNotice("Ese pendiente ya estaba resuelto por otra persona.");
     }
 

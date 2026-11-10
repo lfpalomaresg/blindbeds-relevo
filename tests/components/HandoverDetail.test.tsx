@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../harness/fake-supabase";
 
@@ -31,7 +31,10 @@ function setup(options: ConstructorParameters<typeof FakeSupabase>[0] = {}) {
   return state.fake;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("HandoverDetail", () => {
   it("muestra cabecera (departamento, turno, autor) y los ítems del relevo por bloque", async () => {
@@ -63,5 +66,57 @@ describe("HandoverDetail", () => {
     setup({ tables: { shift_handovers: [], handover_items: [] } });
     await screen.findByText(/relevo no encontrado/i);
     expect(screen.getByRole("link", { name: /volver/i }).getAttribute("href")).toBe("/handover");
+  });
+});
+
+// MUST de minimización: el admin borra un bloque con un dato sensible (000016).
+describe("HandoverDetail — borrado de un bloque por el admin", () => {
+  const ME = "user-1"; // usuario por defecto del FakeSupabase
+  const asRole = (role: string) => ({
+    tables: {
+      shift_handovers: [HANDOVER],
+      handover_items: ITEMS,
+      memberships: [{ org_id: ORG, user_id: ME, role }],
+    },
+  });
+
+  it("staff y supervisor no ven el botón de borrar", async () => {
+    for (const role of ["staff", "supervisor"]) {
+      setup(asRole(role));
+      await screen.findByRole("heading", { name: /pisos · tarde/i });
+      expect(screen.queryByRole("button", { name: /borrar/i })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("el admin borra un bloque tras confirmar: llama a delete_handover_item y desaparece", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fake = setup({ ...asRole("admin"), rpcResults: { delete_handover_item: { data: true, error: null } } });
+    const pendientes = within(await screen.findByRole("region", { name: /pendientes/i }));
+    fireEvent.click(pendientes.getByRole("button", { name: /borrar/i }));
+    await waitFor(() => expect(screen.queryByText("Revisar minibar 101")).toBeNull());
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(fake.rpcCalls).toContainEqual({ fn: "delete_handover_item", args: { p_item_id: "i1" } });
+    expect(screen.getByText("Grupo a las 16h")).toBeTruthy();
+    const [m] = fake.callsTo("memberships", "select");
+    expect(m.filters).toEqual(expect.arrayContaining([["org_id", ORG], ["user_id", ME]]));
+  });
+
+  it("si el admin cancela la confirmación no se borra nada", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const fake = setup(asRole("admin"));
+    const pendientes = within(await screen.findByRole("region", { name: /pendientes/i }));
+    fireEvent.click(pendientes.getByRole("button", { name: /borrar/i }));
+    expect(fake.rpcCalls.some((c) => c.fn === "delete_handover_item")).toBe(false);
+    expect(screen.getByText("Revisar minibar 101")).toBeTruthy();
+  });
+
+  it("si el servidor no lo borra (false o error) se avisa y el bloque sigue", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    setup({ ...asRole("admin"), rpcResults: { delete_handover_item: { data: false, error: null } } });
+    const pendientes = within(await screen.findByRole("region", { name: /pendientes/i }));
+    fireEvent.click(pendientes.getByRole("button", { name: /borrar/i }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/no se pudo borrar/i);
+    expect(screen.getByText("Revisar minibar 101")).toBeTruthy();
   });
 });

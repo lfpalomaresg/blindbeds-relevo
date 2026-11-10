@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { HandoverList } from "@/components/handover/HandoverList";
+import { ItemDeletionLog } from "@/components/handover/ItemDeletionLog";
 
 export default function HandoversPage() {
   const { org, loading } = useAuth();
@@ -19,6 +20,7 @@ export default function HandoversPage() {
         </Link>
       </div>
       <HandoverList orgId={org.id} />
+      <ItemDeletionLog orgId={org.id} />
     </div>
   );
 }

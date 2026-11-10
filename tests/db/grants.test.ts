@@ -41,6 +41,8 @@ type Expected = { anon: boolean; authenticated: boolean; service_role: boolean }
 const FUNCTION_ACL: Record<string, Expected> = {
   "public.change_ticket_status(uuid, text, text)": { anon: false, authenticated: true, service_role: true },
   "public.resolve_handover_item(uuid)": { anon: false, authenticated: true, service_role: false },
+  // 000016: borrado de un ítem por el admin; exige auth.uid().
+  "public.delete_handover_item(uuid)": { anon: false, authenticated: true, service_role: false },
   // Exige auth.uid(): service_role no tiene usuario, no la necesita.
   "public.create_ticket(uuid, text, text, text, uuid, text, text)": { anon: false, authenticated: true, service_role: false },
   // 000014: definer que exige auth.uid(); service_role no la necesita.
@@ -48,6 +50,9 @@ const FUNCTION_ACL: Record<string, Expected> = {
   "public.handover_author_emails(uuid, uuid[])": { anon: false, authenticated: true, service_role: false },
   "public.ticket_author_emails(uuid, uuid[])": { anon: false, authenticated: true, service_role: false },
   "public.purge_expired_handovers()": { anon: false, authenticated: false, service_role: true },
+  "public.purge_expired_item_deletions()": { anon: false, authenticated: false, service_role: true },
+  // 000020: rastro de borrados de solo lectura para el admin; exige auth.uid().
+  "public.handover_item_deletion_log(uuid)": { anon: false, authenticated: true, service_role: false },
 };
 
 async function publicTables(db: Client): Promise<string[]> {
@@ -116,7 +121,14 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
   }
 
   // Desde 000013 la app no escribe partes ni su historial (solo por RPC).
-  const RPC_ONLY = new Set(["public.maintenance_tickets", "public.ticket_updates", "public.shift_handovers", "public.handover_items"]);
+  const RPC_ONLY = new Set([
+    "public.maintenance_tickets",
+    "public.ticket_updates",
+    "public.shift_handovers",
+    "public.handover_items",
+    // 000018: el rastro de borrados solo lo escribe delete_handover_item.
+    "public.handover_item_deletions",
+  ]);
   // (000014: relevos e items también solo por RPC: create_handover / resolve_handover_item.)
   const NO_UPDATE_DELETE = new Set<string>();
 
@@ -153,11 +165,11 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
     await expectFunctionAcl(db);
   });
 
-  it("B) tras la deriva del grant manual, reaplicar 000011 + 000013 restaura las ACL de funciones", async () => {
+  it("B) tras la deriva del grant manual, reaplicar 000011 + 000013…000020 restaura las ACL de funciones", async () => {
     const db = await database("grants_drift");
     await db.query(MANUAL_DRIFT);
     expect(await canExecute(db, "anon", "public.handover_author_emails(uuid, uuid[])")).toBe(true);
-    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014")]);
+    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018"), migrationFile("000019"), migrationFile("000020")]);
     await expectFunctionAcl(db);
   });
 

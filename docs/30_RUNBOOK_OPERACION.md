@@ -161,17 +161,28 @@ selector: una cuenta (email) por hotel.
 4. Rellena uno o más de los cuatro bloques: Pendientes, VIPs, Incidencias,
    Avisos (`src/types/index.ts:95-100`). Máximo 2000 caracteres por bloque; si todos
    están vacíos: «Escribe al menos un bloque antes de registrar el relevo.»
-   (`src/lib/validation.ts:62-84`).
-5. «Registrar relevo» → se crea el relevo y una fila por bloque escrito
-   (`HandoverForm.tsx:69-98`). Pantalla «Relevo registrado» (`:104-127`).
+   (`validateHandoverInput` en `src/lib/validation.ts`). El servidor aplica los
+   mismos límites desde `000017_handover_limits.sql` (como mucho 4 bloques, uno
+   por tipo, 2000 caracteres cada uno).
+5. «Registrar relevo» → la RPC `create_handover` crea el relevo y una fila por
+   bloque escrito **en una sola transacción** (`000006`, definer desde `000014`):
+   se guarda todo o nada. Pantalla «Relevo registrado».
 
 ### Qué ve el turno entrante
 
 - En el panel, sección «Pendientes sin resolver»: **todos** los bloques no
   resueltos del hotel, de cualquier tipo (también VIPs y Avisos), más recientes
   primero (`src/components/handover/PendingItems.tsx:17-31`).
-- Botón «Resolver» en cada uno: lo marca resuelto con autor y hora
-  (`PendingItems.tsx:33-43`). Desaparece para todos.
+- Botón «Resolver» en cada uno: la RPC `resolve_handover_item` (`000014`) lo
+  marca resuelto con autor y hora en la base de datos. Desaparece de la
+  pantalla de quien lo resuelve; los demás dejan de verlo al recargar el panel
+  (no hay actualización en tiempo real).
+- Si la RPC no cambia nada (devuelve `false`), la app vuelve a leer el bloque:
+  - lo ve resuelto → «Ese pendiente ya estaba resuelto por otra persona.» y lo
+    quita de la lista;
+  - no lo ve (hotel suspendido, membresía retirada: RLS lo oculta) o sigue sin
+    resolver → «No se pudo resolver el pendiente: puede que tu acceso a este
+    hotel no esté activo…» y el bloque sigue en la lista. Diagnóstico en §5.
 
 - En `/handover` (enlace «Ver relevos» del panel y «Relevos» de la cabecera):
   los 50 últimos relevos del hotel con departamento, turno, autor (email) y
@@ -186,9 +197,50 @@ selector: una cuenta (email) por hotel.
 
 Cada bloque del relevo lleva el aviso «Sin nombres de huéspedes ni datos de
 salud: usa el nº de habitación.» (`src/lib/privacy.ts`). Es un aviso, no un
-filtro: la app no detecta nombres. Si se cuela un dato sensible, el admin pide
-al operador que borre ese bloque concreto por SQL (acotado por `id` y
-`org_id`, igual que «Borrar un relevo huérfano»).
+filtro: la app no detecta nombres.
+
+### Incidente: se coló un dato sensible en un relevo
+
+Nombre de un huésped, dato de salud, documento… en el texto libre de un bloque.
+
+1. **Borrar el bloque cuanto antes.** Lo hace el **admin del hotel** desde la
+   app: Relevos → abrir el relevo (`/handover/<id>`) → botón **«Borrar»** junto
+   al bloque → confirmar. Por debajo llama a la RPC `delete_handover_item`
+   (`000016_delete_handover_item.sql`): solo borra bloques de relevos de su
+   hotel, staff y supervisores no ven el botón (y el servidor se lo negaría) y
+   la cabecera del relevo se conserva. Desde `000018` cada borrado deja un
+   asiento en `handover_item_deletions` (quién, cuándo, relevo, bloque; sin
+   el texto) en la misma transacción, con `deleted_by` tomado de la sesión.
+
+   **No se borra por SQL.** El SQL Editor corre como `postgres` y no
+   identifica a la persona: un `delete` desde ahí no deja asiento fiable.
+   Si el admin del hotel no está disponible, o el hotel no está activo (la
+   RPC solo actúa en hoteles activos), hoy no hay vía documentada: el caso
+   se anota en el registro del incidente (paso 3) como **borrado pendiente**
+   y queda como decisión abierta del operador. Si nadie lo borra antes, el
+   bloque desaparece con la retención de 90 días **solo si el purgado está
+   programado** en ese proyecto: se comprueba con
+   `select jobname, active from cron.job;` (debe salir
+   `relevo-purge-expired-handovers` activo, ver «Retención de relevos»,
+   abajo) y con su última pasada correcta:
+   `select status, end_time from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'relevo-purge-expired-handovers') order by end_time desc limit 1;`
+   (debe ser `succeeded` y de las últimas 24 h). Ambos resultados van al
+   registro del incidente. Sin job, o con la última pasada fallida o
+   antigua, el dato se conserva sin plazo hasta que se resuelva la decisión
+   abierta.
+2. **Comprobar**, si se borró, que el bloque ya no aparece en
+   `/handover/<id>` ni en «Pendientes».
+3. **Registrar el incidente** fuera de la app (fecha, hotel, qué tipo de dato,
+   quién lo detectó, cuándo se borró o «borrado pendiente» y por qué). **No copiar el dato** en el registro ni
+   en el chat.
+4. **Valorar con el responsable de privacidad del hotel** si hay que notificar
+   (RGPD art. 33: 72 h si hay riesgo para la persona). El hotel es el
+   responsable del tratamiento; Blindbeds, encargado.
+5. **Recordar al equipo** el aviso de minimización (nº de habitación, nunca
+   nombres ni salud).
+
+Las copias de seguridad de Supabase pueden conservar el dato hasta que roten
+(§6); anotarlo en el registro del incidente.
 
 ### Retención de relevos (90 días)
 
@@ -218,6 +270,30 @@ usuarios de la app no.
 4. Para pararla: `select cron.unschedule('relevo-purge-expired-handovers');`.
 
 Ejecución manual puntual: `select public.purge_expired_handovers();`.
+
+### Retención del rastro de borrados (2 años, provisional)
+
+`public.purge_expired_item_deletions()` (`000019_item_deletions_retention.sql`)
+borra los asientos de `handover_item_deletions` con más de 2 años de **todos**
+los hoteles y devuelve cuántos borró. Mismos permisos que la de relevos:
+operador, `service_role` o `pg_cron`; los usuarios de la app no. El plazo de 2
+años es provisional (round 3 de automejora, 10/11/2026), pendiente de
+confirmar por el operador.
+
+**La migración no programa nada.** Para activarla (una vez por proyecto, con
+OK del operador), con `pg_cron` ya activo:
+
+```sql
+-- Todos los días a las 03:30 UTC.
+select cron.schedule(
+  'relevo-purge-expired-item-deletions',
+  '30 3 * * *',
+  $$select public.purge_expired_item_deletions()$$
+);
+```
+
+Comprobar y parar como en «Retención de relevos» (`cron.job`,
+`cron.job_run_details`, `cron.unschedule`).
 
 ### Retención de fotos de averías (90 días)
 
@@ -273,52 +349,55 @@ git). Si el Mac está dormido el lunes, launchd lo lanza al despertar.
   política `update` sobre `shift_handovers`.
 - Deshacer un «Resolver»: no hay botón. Por SQL:
   `update handover_items set resolved = false, resolved_by = null, resolved_at = null where id = '<id>';`
-- Editar o borrar un relevo enviado: no hay UI ni política `delete`.
-- Notificaciones (email/push) al siguiente turno: no existen; el texto «El
-  siguiente turno lo verá al entrar» (`HandoverForm.tsx:114`) significa que lo
-  verá cuando abra el panel.
+- Editar un relevo enviado: no hay UI. Borrar: solo un bloque, y solo el admin
+  (ver «Incidente: se coló un dato sensible»).
+- Notificaciones (email/push) al siguiente turno: no existen. La pantalla dice
+  «Sus puntos quedan como pendientes en el panel de inicio hasta que alguien
+  los resuelva»: el turno entrante lo ve cuando abre el panel.
 
 ### Incidencias típicas
 
 | Síntoma | Causa en el código | Qué hacer |
 |---|---|---|
-| Error tras pulsar «Registrar relevo» y el relevo «a medias» | El relevo se inserta primero y los bloques después (`HandoverForm.tsx:69-98`); si falla el segundo paso queda un relevo sin bloques | Pedir que lo repita. Si hay que limpiar el relevo vacío, seguir «Borrar un relevo huérfano» (abajo): nunca un `delete` sin acotar |
-| Pulsé «Resolver» pero vuelve a salir | El error del `update` se ignora y la fila se quita solo en pantalla (`PendingItems.tsx:37-42`) | Recargar. Si reaparece, revisar sesión/membership (§5) |
+| Error tras pulsar «Registrar relevo» | `create_handover` es atómica: no deja relevos a medias. Pero un error de red puede llegar DESPUÉS de guardarse, y la RPC no es idempotente | Antes de repetirlo, se comprueba en `/handover` si ya está; si está, repetirlo lo duplicaría. Si el error persiste: sesión/membership (§5) |
+| «No se pudo resolver el pendiente: …» | La RPC `resolve_handover_item` devolvió error (p. ej. sesión caducada) o `false` sin que el bloque se lea resuelto (hotel suspendido, membresía retirada) | Recargar suele bastar. Si persiste: sesión/membership (§5) |
+| Relevo sin bloques en la lista | Lo esperado: sus bloques se borraron por el procedimiento de incidente (§ Incidente) y la cabecera se conserva como constancia | Consultar sus asientos en `handover_item_deletions` y clasificarlo según «Relevos sin bloques» (abajo) |
 
-#### Borrar un relevo huérfano
+#### Relevos sin bloques
 
-El SQL Editor elude RLS: un `delete` sin filtros alcanza los relevos de
-**todos** los hoteles del proyecto. Por eso se borra siempre un relevo concreto,
-identificado antes con un `SELECT` acotado a la organización y al usuario que
-reportó el fallo (columnas de `shift_handovers`, `000001_baseline.sql:61-70`).
+Desde `000006` relevo y bloques se crean en una sola transacción: ya no quedan
+relevos huérfanos por un fallo a medias. Lo esperado es que un relevo sin
+bloques venga del procedimiento de incidente (§ Incidente), que conserva la
+cabecera como constancia y, desde `000018`, deja un asiento por bloque.
+Consulta (no borra nada): los relevos del hotel sin bloques, con cuántos
+asientos de borrado tiene cada uno:
 
-1. Localizar (no borra nada). Sustituir `<org_id>` y `<user_id>`; el margen de
-   10 minutos evita tocar un relevo que se esté registrando en ese momento
-   (relevo y bloques se insertan en dos pasos, `HandoverForm.tsx:69-98`):
+```sql
+select h.id, h.created_at, count(d.id) as asientos,
+       string_agg(d.block || ' ' || d.deleted_at || ' ' || d.deleted_by, '; '
+                  order by d.deleted_at) as detalle
+from shift_handovers h
+left join handover_item_deletions d on d.handover_id = h.id and d.org_id = h.org_id
+where h.org_id = '<org_id>'
+  and not exists (select 1 from handover_items i where i.handover_id = h.id)
+group by h.id, h.created_at
+order by h.created_at desc;
+```
 
-   ```sql
-   select h.id, h.department, h.shift_type, h.created_at
-   from shift_handovers h
-   where h.org_id = '<org_id>'
-     and h.created_by = '<user_id>'
-     and h.created_at > now() - interval '1 day'
-     and h.created_at < now() - interval '10 minutes'
-     and not exists (select 1 from handover_items i where i.handover_id = h.id);
-   ```
+- `asientos` 1 o más: al menos un bloque pasó por el procedimiento de
+  incidente. No prueba que todos lo hicieran: la base no guarda cuántos
+  bloques tenía el relevo. Se coteja `detalle` (bloque, hora y quién) con los
+  registros de incidente de ese hotel; un bloque borrado sin registro ni
+  asiento que lo cubra es una anomalía, como en el caso siguiente.
+- `asientos` 0 y relevo creado **después** de aplicar `000018` en ese
+  proyecto: anomalía (borrado fuera del procedimiento o pérdida de datos);
+  se trata como incidente (quién tenía acceso a SQL, copias de seguridad, §6).
+- `asientos` 0 y relevo creado **antes** de `000018`: no se puede clasificar
+  (borrado anterior al rastro o huérfano anterior a `000006`); se anota sin
+  más.
 
-2. Comprobar con el usuario que la fila (hora, departamento, turno) es la del
-   intento fallido.
-3. Borrar solo ese `id`, repitiendo la condición de huérfano por seguridad:
-
-   ```sql
-   delete from shift_handovers h
-   where h.id = '<handover_id>'
-     and h.org_id = '<org_id>'
-     and not exists (select 1 from handover_items i where i.handover_id = h.id);
-   ```
-
-   Debe responder `DELETE 1`. Si responde `DELETE 0`, el relevo ya tiene
-   bloques o el id no es de esa organización: no insistir.
+El procedimiento SQL de limpieza de huérfanos de antes de `000006` ya no
+figura en el runbook (queda en el historial de git).
 
 ---
 
@@ -338,16 +417,19 @@ reportó el fallo (columnas de `shift_handovers`, `000001_baseline.sql:61-70`).
    `TicketForm.tsx:26`).
 4. Foto: JPEG, PNG o WebP, ≤10 MB; en móvil abre la cámara trasera
    (`TicketForm.tsx:213-222`, `validation.ts:148-160`).
-5. «Crear parte de avería» → sube la foto a `ticket-photos/<org_id>/<uuid>.<ext>`
-   y luego inserta el parte en estado `abierto` (`TicketForm.tsx:78-103`).
+5. «Crear parte de avería» → sube la foto (si la hay) a
+   `ticket-photos/<org_id>/<uuid>.<ext>` y luego la RPC `create_ticket`
+   (`000013_ticket_rpc.sql`) crea el parte en estado `abierto`; la app no
+   escribe la tabla directamente.
 
-**Foto obligatoria u opcional:** la pantalla dice «La foto es obligatoria»
-(`src/app/tickets/new/page.tsx:16`) pero el código la trata como **opcional**
-(`TicketForm.tsx:63`, `:80`): un parte sin foto se crea. Decisión de producto
-pendiente (ver notas de sesión 2026-10-11).
+**Foto opcional** (`docs/MVP.md`, v1.0 del 27/10/2026, «foto opcional» entre
+las opciones por defecto): la pantalla lo dice (`src/app/tickets/new/page.tsx`)
+y un parte sin foto se crea. Si lleva foto, `create_ticket` exige que esté en
+Storage, que la haya subido quien crea el parte, que tenga menos de 12 h y que
+no esté en otro parte.
 
-**«Mantenimiento ha sido notificado»** (`TicketForm.tsx:123`): **no se envía
-ninguna notificación**. Mantenimiento lo ve cuando abre el panel.
+**Sin notificaciones:** la pantalla dice «Queda abierto y visible en el panel
+de inicio» (`TicketForm.tsx`). Mantenimiento lo ve cuando abre el panel.
 
 ### Seguimiento de partes (técnico)
 
@@ -359,13 +441,12 @@ ninguna notificación**. Mantenimiento lo ve cuando abre el panel.
 - La tarjeta muestra título, descripción, estado, prioridad, fecha y, si la
   tiene, la foto (URL firmada de 5 minutos, `src/components/tickets/TicketPhoto.tsx`;
   si Storage no la firma: «Foto no disponible»).
-- **Smoke pendiente (Supabase real, no simulable en local):** con un usuario
-  del hotel A, llamar a `createSignedUrl('ticket-photos', '<org_B>/<foto>.jpg', 300)`
-  debe fallar (Storage no firma objetos que las policies de `storage.objects`,
-  `000003`, no le dejan leer) y la tarjeta mostrar «Foto no disponible». Con un
-  usuario del hotel B la misma foto se ve. Hasta hacer ese smoke, el aislamiento
-  de la URL firmada entre hoteles está «no verificado» (las policies sí tienen
-  test con Postgres en `tests/db/storage.test.ts`).
+- Aislamiento de la URL firmada entre hoteles: cubierto por el recorrido e2e
+  `e2e/04-fotos.spec.ts` contra Supabase local («otro hotel no obtiene URL
+  firmada ni descarga la foto») y por las policies de `storage.objects`
+  (`000003`) con test en `tests/db/storage.test.ts`. El smoke en producción del
+  02/11/2026 (`docs/MVP.md`) vio la foto propia del parte; la denegación entre
+  hoteles no se probó en producción.
 
 ### Lo que no existe todavía
 

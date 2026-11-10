@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { changeTicketStatusErrorMessage } from "@/lib/ticket-errors";
 import type { MaintenanceTicket, TicketStatus } from "@/types";
 import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types";
 import { TicketPhoto } from "./TicketPhoto";
@@ -61,7 +62,7 @@ export function TicketList({ orgId }: TicketListProps) {
     });
 
     if (rpcError) {
-      setError("No se pudo actualizar el parte: " + rpcError.message);
+      setError(changeTicketStatusErrorMessage(rpcError));
     } else if (changed !== true) {
       setError("El parte cambió de estado en otro dispositivo. Se ha actualizado la lista.");
     }

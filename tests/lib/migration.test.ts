@@ -34,7 +34,29 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
       "000012_ticket_guard.sql",
       "000013_ticket_rpc.sql",
       "000014_handover_item_rpc.sql",
+      "000016_delete_handover_item.sql",
+      "000017_handover_limits.sql",
+      "000018_handover_item_deletions.sql",
+      "000019_item_deletions_retention.sql",
+      "000020_item_deletion_log.sql",
     ]);
+  });
+});
+
+describe("migration 000017_handover_limits — límites del relevo en el servidor", () => {
+  let sql: string;
+  beforeAll(() => {
+    sql = readFileSync(`${MIGRATION_DIR}/000017_handover_limits.sql`, "utf-8").toLowerCase();
+  });
+
+  it("rechaza por la cota barata (char_length > 2000) en un IF propio ANTES de recorrer el texto carácter a carácter", () => {
+    // Careo r1: recorrer con regexp_split_to_table un texto de millones de
+    // caracteres antes de rechazarlo es un vector de CPU/memoria.
+    const body = sql.slice(sql.indexOf("as $$"));
+    const cheap = body.search(/if exists \(\s*select 1\s+from pg_catalog\.jsonb_array_elements\(p_items\) as e\(item\)\s+where pg_catalog\.char_length\(e\.item ->> 'content'\) > 2000\s*\) then/);
+    const split = body.indexOf("regexp_split_to_table");
+    expect(cheap).toBeGreaterThan(-1);
+    expect(split).toBeGreaterThan(cheap);
   });
 });
 

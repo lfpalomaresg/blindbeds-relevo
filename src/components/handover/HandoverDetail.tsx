@@ -22,6 +22,8 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
   const [items, setItems] = useState<HandoverItem[]>([]);
   const [author, setAuthor] = useState<string>(UNKNOWN_AUTHOR);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -42,7 +44,13 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
       ]);
       const found = (h as ShiftHandover | null) ?? null;
       const dir = found ? await fetchAuthorEmails(supabase, orgId, [found.created_by]) : new Map<string, string>();
+      // Solo para mostrar el botón: el servidor (delete_handover_item) decide.
+      const { data: userData } = await supabase.auth.getUser();
+      const { data: membership } = userData.user
+        ? await supabase.from("memberships").select("role").eq("org_id", orgId).eq("user_id", userData.user.id).maybeSingle()
+        : { data: null };
       if (!active) return;
+      setIsAdmin((membership as { role?: string } | null)?.role === "admin");
       setHandover(found);
       setItems(found && its ? (its as HandoverItem[]) : []);
       if (found) setAuthor(dir.get(found.created_by) ?? UNKNOWN_AUTHOR);
@@ -50,6 +58,17 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
     })();
     return () => { active = false; };
   }, [orgId, handoverId, supabase]);
+
+  async function deleteItem(item: HandoverItem) {
+    setError("");
+    if (!window.confirm("¿Borrar este bloque del relevo? No se puede deshacer. Úsalo si contiene un dato sensible (nombre de un huésped, salud…).")) return;
+    const { data: deleted, error: rpcError } = await supabase.rpc("delete_handover_item", { p_item_id: item.id });
+    if (rpcError || deleted !== true) {
+      setError("No se pudo borrar el bloque. Recarga la página y vuelve a intentarlo; si persiste, avisa al operador.");
+      return;
+    }
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+  }
 
   if (loading) return <p className="text-gray-500">Cargando relevo...</p>;
 
@@ -79,6 +98,8 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
         </p>
       </div>
 
+      {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
+
       {HANDOVER_BLOCKS.map((block) => {
         const blockItems = items.filter((i) => i.block === block.value);
         if (blockItems.length === 0) return null;
@@ -92,9 +113,21 @@ export function HandoverDetail({ orgId, handoverId }: HandoverDetailProps) {
                   <span className={`min-w-0 whitespace-pre-wrap wrap-anywhere ${item.resolved ? "text-gray-400 line-through" : "text-gray-800"}`}>
                     {item.content}
                   </span>
-                  {item.resolved && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap">Resuelto</span>
-                  )}
+                  <span className="flex items-center gap-2 shrink-0">
+                    {item.resolved && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap">Resuelto</span>
+                    )}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => void deleteItem(item)}
+                        aria-label={`Borrar bloque ${block.label}`}
+                        className="text-xs px-2 py-0.5 rounded border border-red-200 text-red-700 hover:bg-red-50 whitespace-nowrap"
+                      >
+                        Borrar
+                      </button>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>

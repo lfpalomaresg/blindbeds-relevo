@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { createHandoverErrorMessage } from "@/lib/handover-errors";
 import { LIMITS, validateHandoverInput } from "@/lib/validation";
 import { FREE_TEXT_NOTICE } from "@/lib/privacy";
 import type { HandoverItem, HandoverBlock, Department, ShiftType } from "@/types";
@@ -78,7 +79,7 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
     });
 
     if (rpcError) {
-      setError(rpcError.message || "Error al crear el relevo");
+      setError(createHandoverErrorMessage(rpcError));
       setSaving(false);
       return;
     }

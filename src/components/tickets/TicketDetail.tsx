@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { changeTicketStatusErrorMessage } from "@/lib/ticket-errors";
 import { UNKNOWN_AUTHOR, fetchTicketAuthorEmails, formatDateTime } from "@/lib/members";
 import type { MaintenanceTicket, TicketStatus, TicketUpdate } from "@/types";
 import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types";
@@ -81,7 +82,7 @@ export function TicketDetail({ orgId, ticketId }: TicketDetailProps) {
     setSaving(false);
 
     if (rpcError) {
-      setError("No se pudo cambiar el estado: " + rpcError.message);
+      setError(changeTicketStatusErrorMessage(rpcError));
       return;
     }
     if (changed !== true) {
