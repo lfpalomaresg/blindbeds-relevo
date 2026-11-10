@@ -4,6 +4,42 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-10 — Round 3-bis de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
+
+**Hecho**
+- Línea base al empezar: 690 tests. Al cerrar: 715 tests, tsc y lint en verde
+  (ejecución local con Postgres).
+- `d60c416` — `TicketList` y `TicketDetail`: los errores de
+  `change_ticket_status` salen con mensajes propios (42501 sesión, 22023
+  transición no permitida, genérico para el resto); nunca el texto del
+  servidor. `src/lib/ticket-errors.ts` con test de sincronía con la
+  definición vigente (`000013`); `TicketDetail` tiene ya test de componente.
+- `45eadb8` — `000020_item_deletion_log.sql`: `handover_item_deletion_log(org)`
+  devuelve fecha, email de quien borró, relevo (id, fecha, departamento,
+  turno) y bloque; nunca el contenido. Solo da filas al admin de un hotel
+  activo y de su hotel (misma comprobación que la policy de `000018`).
+  `000020` entra en la secuencia de reaplicación tras `000011`.
+- `40fdeb8` — `/handover`: sección «Rastro de borrados», solo para el admin,
+  con enlace al relevo o aviso de relevo ya purgado. El estado va atado al
+  hotel cargado (hallazgo del careo).
+
+**Pendiente**
+- Migraciones `000016` a `000020`: solo como ficheros. Estado a 10/11/2026:
+  sin aplicar en `relevo`. Orden: 000016 → 000017 → 000018 → 000019 → 000020.
+  Sin `000020` aplicada, la sección del rastro muestra «No se pudo cargar».
+- Prueba en navegador de la sección «Rastro de borrados» con un admin y con un
+  staff, tras aplicar `000020`.
+- Siguen abiertas (decisiones del operador, fuera de este round): borrado de
+  un bloque sin admin disponible o con el hotel no activo; idempotencia de
+  `create_handover`; plazo de 2 años del rastro.
+
+**Decidido**
+- El rastro de borrados se lee por una función security definer (necesita
+  `auth.users` para el email) con la comprobación de admin dentro; la UI mira
+  el rol solo para no pintar la sección.
+
+---
+
 ## 2026-11-10 — Round 3 de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
 
 **Hecho**
