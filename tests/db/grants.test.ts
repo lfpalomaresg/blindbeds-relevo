@@ -118,7 +118,14 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
   }
 
   // Desde 000013 la app no escribe partes ni su historial (solo por RPC).
-  const RPC_ONLY = new Set(["public.maintenance_tickets", "public.ticket_updates", "public.shift_handovers", "public.handover_items"]);
+  const RPC_ONLY = new Set([
+    "public.maintenance_tickets",
+    "public.ticket_updates",
+    "public.shift_handovers",
+    "public.handover_items",
+    // 000018: el rastro de borrados solo lo escribe delete_handover_item.
+    "public.handover_item_deletions",
+  ]);
   // (000014: relevos e items también solo por RPC: create_handover / resolve_handover_item.)
   const NO_UPDATE_DELETE = new Set<string>();
 
@@ -159,7 +166,7 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
     const db = await database("grants_drift");
     await db.query(MANUAL_DRIFT);
     expect(await canExecute(db, "anon", "public.handover_author_emails(uuid, uuid[])")).toBe(true);
-    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016")]);
+    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018")]);
     await expectFunctionAcl(db);
   });
 
