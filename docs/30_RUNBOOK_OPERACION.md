@@ -363,16 +363,19 @@ reportó el fallo (columnas de `shift_handovers`, `000001_baseline.sql:61-70`).
    `TicketForm.tsx:26`).
 4. Foto: JPEG, PNG o WebP, ≤10 MB; en móvil abre la cámara trasera
    (`TicketForm.tsx:213-222`, `validation.ts:148-160`).
-5. «Crear parte de avería» → sube la foto a `ticket-photos/<org_id>/<uuid>.<ext>`
-   y luego inserta el parte en estado `abierto` (`TicketForm.tsx:78-103`).
+5. «Crear parte de avería» → sube la foto (si la hay) a
+   `ticket-photos/<org_id>/<uuid>.<ext>` y luego la RPC `create_ticket`
+   (`000013_ticket_rpc.sql`) crea el parte en estado `abierto`; la app no
+   escribe la tabla directamente.
 
-**Foto obligatoria u opcional:** la pantalla dice «La foto es obligatoria»
-(`src/app/tickets/new/page.tsx:16`) pero el código la trata como **opcional**
-(`TicketForm.tsx:63`, `:80`): un parte sin foto se crea. Decisión de producto
-pendiente (ver notas de sesión 2026-10-11).
+**Foto opcional** (`docs/MVP.md`, v1.0 del 27/10/2026, «foto opcional» entre
+las opciones por defecto): la pantalla lo dice (`src/app/tickets/new/page.tsx`)
+y un parte sin foto se crea. Si lleva foto, `create_ticket` exige que esté en
+Storage, que la haya subido quien crea el parte, que tenga menos de 12 h y que
+no esté en otro parte.
 
-**«Mantenimiento ha sido notificado»** (`TicketForm.tsx:123`): **no se envía
-ninguna notificación**. Mantenimiento lo ve cuando abre el panel.
+**Sin notificaciones:** la pantalla dice «Queda abierto y visible en el panel
+de inicio» (`TicketForm.tsx`). Mantenimiento lo ve cuando abre el panel.
 
 ### Seguimiento de partes (técnico)
 
@@ -384,13 +387,12 @@ ninguna notificación**. Mantenimiento lo ve cuando abre el panel.
 - La tarjeta muestra título, descripción, estado, prioridad, fecha y, si la
   tiene, la foto (URL firmada de 5 minutos, `src/components/tickets/TicketPhoto.tsx`;
   si Storage no la firma: «Foto no disponible»).
-- **Smoke pendiente (Supabase real, no simulable en local):** con un usuario
-  del hotel A, llamar a `createSignedUrl('ticket-photos', '<org_B>/<foto>.jpg', 300)`
-  debe fallar (Storage no firma objetos que las policies de `storage.objects`,
-  `000003`, no le dejan leer) y la tarjeta mostrar «Foto no disponible». Con un
-  usuario del hotel B la misma foto se ve. Hasta hacer ese smoke, el aislamiento
-  de la URL firmada entre hoteles está «no verificado» (las policies sí tienen
-  test con Postgres en `tests/db/storage.test.ts`).
+- Aislamiento de la URL firmada entre hoteles: cubierto por el recorrido e2e
+  `e2e/04-fotos.spec.ts` contra Supabase local («otro hotel no obtiene URL
+  firmada ni descarga la foto») y por las policies de `storage.objects`
+  (`000003`) con test en `tests/db/storage.test.ts`. El smoke en producción del
+  02/11/2026 (`docs/MVP.md`) vio la foto propia del parte; la denegación entre
+  hoteles no se probó en producción.
 
 ### Lo que no existe todavía
 
