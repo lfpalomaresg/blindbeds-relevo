@@ -197,13 +197,30 @@ Nombre de un huésped, dato de salud, documento… en el texto libre de un bloqu
    al bloque → confirmar. Por debajo llama a la RPC `delete_handover_item`
    (`000016_delete_handover_item.sql`): solo borra bloques de relevos de su
    hotel, staff y supervisores no ven el botón (y el servidor se lo negaría) y
-   la cabecera del relevo se conserva. Si el admin no está
-   disponible, el operador lo borra por SQL acotado por `id` **y** `org_id`
-   (igual que «Borrar un relevo huérfano»).
-2. **Comprobar** que el bloque ya no aparece en `/handover/<id>` ni en
-   «Pendientes».
+   la cabecera del relevo se conserva. Desde `000018` cada borrado deja un
+   asiento en `handover_item_deletions` (quién, cuándo, relevo, bloque; sin
+   el texto) en la misma transacción, con `deleted_by` tomado de la sesión.
+
+   **No se borra por SQL.** El SQL Editor corre como `postgres` y no
+   identifica a la persona: un `delete` desde ahí no deja asiento fiable.
+   Si el admin del hotel no está disponible, o el hotel no está activo (la
+   RPC solo actúa en hoteles activos), hoy no hay vía documentada: el caso
+   se anota en el registro del incidente (paso 3) como **borrado pendiente**
+   y queda como decisión abierta del operador. Si nadie lo borra antes, el
+   bloque desaparece con la retención de 90 días **solo si el purgado está
+   programado** en ese proyecto: se comprueba con
+   `select jobname, active from cron.job;` (debe salir
+   `relevo-purge-expired-handovers` activo, ver «Retención de relevos»,
+   abajo) y con su última pasada correcta:
+   `select status, end_time from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'relevo-purge-expired-handovers') order by end_time desc limit 1;`
+   (debe ser `succeeded` y de las últimas 24 h). Ambos resultados van al
+   registro del incidente. Sin job, o con la última pasada fallida o
+   antigua, el dato se conserva sin plazo hasta que se resuelva la decisión
+   abierta.
+2. **Comprobar**, si se borró, que el bloque ya no aparece en
+   `/handover/<id>` ni en «Pendientes».
 3. **Registrar el incidente** fuera de la app (fecha, hotel, qué tipo de dato,
-   quién lo detectó, cuándo se borró). **No copiar el dato** en el registro ni
+   quién lo detectó, cuándo se borró o «borrado pendiente» y por qué). **No copiar el dato** en el registro ni
    en el chat.
 4. **Valorar con el responsable de privacidad del hotel** si hay que notificar
    (RGPD art. 33: 72 h si hay riesgo para la persona). El hotel es el
