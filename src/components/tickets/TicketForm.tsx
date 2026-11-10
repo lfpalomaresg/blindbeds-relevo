@@ -10,6 +10,7 @@ import {
   validatePhoto,
   validateTicketInput,
 } from "@/lib/validation";
+import { TICKET_PHOTO_UPLOAD_ERROR, createTicketErrorMessage } from "@/lib/ticket-errors";
 import { TICKET_PRIORITIES } from "@/types";
 import type { TicketPriority } from "@/types";
 import { QRScanner } from "./QRScanner";
@@ -149,7 +150,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
         .upload(filePath, photo, { contentType: photoCheck.value.contentType, upsert: false });
 
       if (uploadError) {
-        setError("Error al subir la foto: " + uploadError.message);
+        setError(TICKET_PHOTO_UPLOAD_ERROR);
         setSaving(false);
         return;
       }
@@ -172,7 +173,7 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
       // La foto NO se borra aquí: el error puede ser ambiguo (el parte se creó y
       // se perdió la respuesta). Si quedó huérfana, el barrido del servidor la
       // borra a las 24 h (scripts/purge-ticket-photos.mjs).
-      setError(insertError.message);
+      setError(createTicketErrorMessage(insertError));
       setSaving(false);
       return;
     }
