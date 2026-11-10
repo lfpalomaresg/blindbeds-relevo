@@ -316,51 +316,53 @@ git). Si el Mac está dormido el lunes, launchd lo lanza al despertar.
   `update handover_items set resolved = false, resolved_by = null, resolved_at = null where id = '<id>';`
 - Editar un relevo enviado: no hay UI. Borrar: solo un bloque, y solo el admin
   (ver «Incidente: se coló un dato sensible»).
-- Notificaciones (email/push) al siguiente turno: no existen; el texto «El
-  siguiente turno lo verá al entrar» (`HandoverForm.tsx:114`) significa que lo
-  verá cuando abra el panel.
+- Notificaciones (email/push) al siguiente turno: no existen. La pantalla dice
+  «Sus puntos quedan como pendientes en el panel de inicio hasta que alguien
+  los resuelva»: el turno entrante lo ve cuando abre el panel.
 
 ### Incidencias típicas
 
 | Síntoma | Causa en el código | Qué hacer |
 |---|---|---|
-| Error tras pulsar «Registrar relevo» y el relevo «a medias» | El relevo se inserta primero y los bloques después (`HandoverForm.tsx:69-98`); si falla el segundo paso queda un relevo sin bloques | Pedir que lo repita. Si hay que limpiar el relevo vacío, seguir «Borrar un relevo huérfano» (abajo): nunca un `delete` sin acotar |
-| Pulsé «Resolver» pero vuelve a salir | El error del `update` se ignora y la fila se quita solo en pantalla (`PendingItems.tsx:37-42`) | Recargar. Si reaparece, revisar sesión/membership (§5) |
+| Error tras pulsar «Registrar relevo» | `create_handover` es atómica: no deja relevos a medias. Pero un error de red puede llegar DESPUÉS de guardarse, y la RPC no es idempotente | Antes de repetirlo, se comprueba en `/handover` si ya está; si está, repetirlo lo duplicaría. Si el error persiste: sesión/membership (§5) |
+| «No se pudo resolver el pendiente: …» | La RPC `resolve_handover_item` devolvió error (p. ej. sesión caducada) o `false` sin que el bloque se lea resuelto (hotel suspendido, membresía retirada) | Recargar suele bastar. Si persiste: sesión/membership (§5) |
+| Relevo sin bloques en la lista | Lo esperado: sus bloques se borraron por el procedimiento de incidente (§ Incidente) y la cabecera se conserva como constancia | Consultar sus asientos en `handover_item_deletions` y clasificarlo según «Relevos sin bloques» (abajo) |
 
-#### Borrar un relevo huérfano
+#### Relevos sin bloques
 
-El SQL Editor elude RLS: un `delete` sin filtros alcanza los relevos de
-**todos** los hoteles del proyecto. Por eso se borra siempre un relevo concreto,
-identificado antes con un `SELECT` acotado a la organización y al usuario que
-reportó el fallo (columnas de `shift_handovers`, `000001_baseline.sql:61-70`).
+Desde `000006` relevo y bloques se crean en una sola transacción: ya no quedan
+relevos huérfanos por un fallo a medias. Lo esperado es que un relevo sin
+bloques venga del procedimiento de incidente (§ Incidente), que conserva la
+cabecera como constancia y, desde `000018`, deja un asiento por bloque.
+Consulta (no borra nada): los relevos del hotel sin bloques, con cuántos
+asientos de borrado tiene cada uno:
 
-1. Localizar (no borra nada). Sustituir `<org_id>` y `<user_id>`; el margen de
-   10 minutos evita tocar un relevo que se esté registrando en ese momento
-   (relevo y bloques se insertan en dos pasos, `HandoverForm.tsx:69-98`):
+```sql
+select h.id, h.created_at, count(d.id) as asientos,
+       string_agg(d.block || ' ' || d.deleted_at || ' ' || d.deleted_by, '; '
+                  order by d.deleted_at) as detalle
+from shift_handovers h
+left join handover_item_deletions d on d.handover_id = h.id and d.org_id = h.org_id
+where h.org_id = '<org_id>'
+  and not exists (select 1 from handover_items i where i.handover_id = h.id)
+group by h.id, h.created_at
+order by h.created_at desc;
+```
 
-   ```sql
-   select h.id, h.department, h.shift_type, h.created_at
-   from shift_handovers h
-   where h.org_id = '<org_id>'
-     and h.created_by = '<user_id>'
-     and h.created_at > now() - interval '1 day'
-     and h.created_at < now() - interval '10 minutes'
-     and not exists (select 1 from handover_items i where i.handover_id = h.id);
-   ```
+- `asientos` 1 o más: al menos un bloque pasó por el procedimiento de
+  incidente. No prueba que todos lo hicieran: la base no guarda cuántos
+  bloques tenía el relevo. Se coteja `detalle` (bloque, hora y quién) con los
+  registros de incidente de ese hotel; un bloque borrado sin registro ni
+  asiento que lo cubra es una anomalía, como en el caso siguiente.
+- `asientos` 0 y relevo creado **después** de aplicar `000018` en ese
+  proyecto: anomalía (borrado fuera del procedimiento o pérdida de datos);
+  se trata como incidente (quién tenía acceso a SQL, copias de seguridad, §6).
+- `asientos` 0 y relevo creado **antes** de `000018`: no se puede clasificar
+  (borrado anterior al rastro o huérfano anterior a `000006`); se anota sin
+  más.
 
-2. Comprobar con el usuario que la fila (hora, departamento, turno) es la del
-   intento fallido.
-3. Borrar solo ese `id`, repitiendo la condición de huérfano por seguridad:
-
-   ```sql
-   delete from shift_handovers h
-   where h.id = '<handover_id>'
-     and h.org_id = '<org_id>'
-     and not exists (select 1 from handover_items i where i.handover_id = h.id);
-   ```
-
-   Debe responder `DELETE 1`. Si responde `DELETE 0`, el relevo ya tiene
-   bloques o el id no es de esa organización: no insistir.
+El procedimiento SQL de limpieza de huérfanos de antes de `000006` ya no
+figura en el runbook (queda en el historial de git).
 
 ---
 
