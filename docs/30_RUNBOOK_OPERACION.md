@@ -161,17 +161,28 @@ selector: una cuenta (email) por hotel.
 4. Rellena uno o más de los cuatro bloques: Pendientes, VIPs, Incidencias,
    Avisos (`src/types/index.ts:95-100`). Máximo 2000 caracteres por bloque; si todos
    están vacíos: «Escribe al menos un bloque antes de registrar el relevo.»
-   (`src/lib/validation.ts:62-84`).
-5. «Registrar relevo» → se crea el relevo y una fila por bloque escrito
-   (`HandoverForm.tsx:69-98`). Pantalla «Relevo registrado» (`:104-127`).
+   (`validateHandoverInput` en `src/lib/validation.ts`). El servidor aplica los
+   mismos límites desde `000017_handover_limits.sql` (como mucho 4 bloques, uno
+   por tipo, 2000 caracteres cada uno).
+5. «Registrar relevo» → la RPC `create_handover` crea el relevo y una fila por
+   bloque escrito **en una sola transacción** (`000006`, definer desde `000014`):
+   se guarda todo o nada. Pantalla «Relevo registrado».
 
 ### Qué ve el turno entrante
 
 - En el panel, sección «Pendientes sin resolver»: **todos** los bloques no
   resueltos del hotel, de cualquier tipo (también VIPs y Avisos), más recientes
   primero (`src/components/handover/PendingItems.tsx:17-31`).
-- Botón «Resolver» en cada uno: lo marca resuelto con autor y hora
-  (`PendingItems.tsx:33-43`). Desaparece para todos.
+- Botón «Resolver» en cada uno: la RPC `resolve_handover_item` (`000014`) lo
+  marca resuelto con autor y hora en la base de datos. Desaparece de la
+  pantalla de quien lo resuelve; los demás dejan de verlo al recargar el panel
+  (no hay actualización en tiempo real).
+- Si la RPC no cambia nada (devuelve `false`), la app vuelve a leer el bloque:
+  - lo ve resuelto → «Ese pendiente ya estaba resuelto por otra persona.» y lo
+    quita de la lista;
+  - no lo ve (hotel suspendido, membresía retirada: RLS lo oculta) o sigue sin
+    resolver → «No se pudo resolver el pendiente: puede que tu acceso a este
+    hotel no esté activo…» y el bloque sigue en la lista. Diagnóstico en §5.
 
 - En `/handover` (enlace «Ver relevos» del panel y «Relevos» de la cabecera):
   los 50 últimos relevos del hotel con departamento, turno, autor (email) y
