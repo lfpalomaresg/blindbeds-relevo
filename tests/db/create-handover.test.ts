@@ -123,6 +123,71 @@ describe.skipIf(!available)("create_handover: cabecera + items en una sola trans
     expect(await committedCounts()).toEqual({ handovers: 0, items: 0 });
   });
 
+  // 000017: los límites de la UI (validateHandoverInput) también en el servidor.
+  // Una llamada directa a la RPC con la anon key + sesión no puede saltárselos.
+  it("más de 4 ítems se rechaza (un relevo tiene 4 bloques) y no deja nada", async () => {
+    // Cinco bloques distintos (el 5.º fuera de catálogo): sin la guarda de
+    // cantidad el error sería el CHECK (23514), no 22023.
+    const items = ["pendientes", "vips", "incidencias", "avisos", "otro_bloque"].map((block, n) => ({ block, content: `Ítem ${n}` }));
+    await expect(autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(items)])).rejects.toMatchObject({
+      code: INVALID_PARAM,
+    });
+    expect(await committedCounts()).toEqual({ handovers: 0, items: 0 });
+  });
+
+  it("dos ítems del mismo bloque se rechazan (un ítem por bloque) y no deja nada", async () => {
+    const items = [
+      { block: "pendientes", content: "Uno" },
+      { block: "pendientes", content: "Otro" },
+    ];
+    await expect(autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(items)])).rejects.toMatchObject({
+      code: INVALID_PARAM,
+    });
+    expect(await committedCounts()).toEqual({ handovers: 0, items: 0 });
+  });
+
+  it("un contenido de más de 2000 caracteres se rechaza; justo 2000 se acepta", async () => {
+    const tooLong = [{ block: "avisos", content: "x".repeat(2001) }];
+    await expect(autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(tooLong)])).rejects.toMatchObject({
+      code: INVALID_PARAM,
+    });
+    expect(await committedCounts()).toEqual({ handovers: 0, items: 0 });
+
+    const atLimit = [{ block: "avisos", content: "x".repeat(2000) }];
+    await autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(atLimit)]);
+    expect(await committedCounts()).toEqual({ handovers: 1, items: 1 });
+  });
+
+  it("el límite cuenta como la UI (String.length, unidades UTF-16): 1001 emojis = 2002 se rechaza, 1000 se acepta", async () => {
+    const emoji = "\u{1F6BF}"; // fuera del BMP: 2 unidades UTF-16, 1 punto de código
+    const tooLong = [{ block: "avisos", content: emoji.repeat(1001) }];
+    await expect(autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(tooLong)])).rejects.toMatchObject({
+      code: INVALID_PARAM,
+    });
+    expect(await committedCounts()).toEqual({ handovers: 0, items: 0 });
+
+    const atLimit = [{ block: "avisos", content: emoji.repeat(1000) }];
+    expect(atLimit[0].content.length).toBe(2000);
+    await autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(atLimit)]);
+    expect(await committedCounts()).toEqual({ handovers: 1, items: 1 });
+  });
+
+  it("cuatro textos enormes se rechazan sin dejar nada", async () => {
+    // 4 ítems de 2 M de caracteres: si la RPC partiera cada texto en filas antes
+    // de rechazarlo, serían 8 M de filas intermedias (CPU/memoria del servidor).
+    const huge = "x".repeat(2_000_000);
+    const items = ["pendientes", "vips", "incidencias", "avisos"].map((block) => ({ block, content: huge }));
+    const payload = JSON.stringify(items);
+    await expect(autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", payload])).rejects.toMatchObject({ code: INVALID_PARAM });
+    expect(await committedCounts()).toEqual({ handovers: 0, items: 0 });
+  }, 60_000);
+
+  it("los 4 bloques distintos, uno por bloque, se aceptan", async () => {
+    const items = ["pendientes", "vips", "incidencias", "avisos"].map((block) => ({ block, content: `Texto ${block}` }));
+    await autocommitAs(staffA, CALL, [ORG_A, DEPT, "manana", JSON.stringify(items)]);
+    expect(await committedCounts()).toEqual({ handovers: 1, items: 4 });
+  });
+
   it("un miembro de A no puede crear un relevo en la org B (RLS) y no queda nada", async () => {
     const items = [{ block: "avisos", content: "Cruce de org" }];
     await expect(autocommitAs(staffA, CALL, [ORG_B, DEPT, "tarde", JSON.stringify(items)])).rejects.toMatchObject({
