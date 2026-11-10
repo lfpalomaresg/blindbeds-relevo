@@ -107,14 +107,41 @@ describe("HandoverForm", () => {
     expect(screen.getByText(/noche/i)).toBeTruthy();
   });
 
-  it("muestra el error de la base de datos si create_handover falla y no da el relevo por registrado", async () => {
+  it("si create_handover falla muestra un error en castellano sin el texto de la base de datos y no da el relevo por registrado", async () => {
     const fake = setup({ rpcResults: { create_handover: { data: null, error: { message: "new row violates row-level security policy" } } } });
     type(/^incidencias/i, "Fuga en 204");
     submit();
-    await screen.findByText(/row-level security/i);
+    await screen.findByText(/no se pudo registrar el relevo/i);
+    expect(screen.queryByText(/row-level security/i)).toBeNull();
     expect(screen.queryByText(/relevo registrado/i)).toBeNull();
     expect(fake.callsTo("shift_handovers", "insert")).toHaveLength(0);
     expect(fake.callsTo("handover_items", "insert")).toHaveLength(0);
+  });
+
+  // 000017 rechaza con 22023 lo que la validación del cliente ya debería haber
+  // parado (p. ej. una versión antigua de la app en caché). El texto del servidor
+  // es inglés; el usuario ve el motivo en castellano.
+  it.each([
+    ["handover requires at least one item", /escribe al menos un bloque/i],
+    ["handover allows at most 4 items", /como mucho 4 bloques/i],
+    ["handover allows one item per block", /un solo texto por bloque/i],
+    ["every handover item needs non-empty content", /ningún bloque puede ir vacío/i],
+    ["handover item content must be at most 2000 characters", /2000 caracteres/i],
+  ])("22023 «%s» → mensaje en castellano, sin el texto en inglés", async (message, expected) => {
+    setup({ rpcResults: { create_handover: { data: null, error: { code: "22023", message } } } });
+    type(/^incidencias/i, "Fuga en 204");
+    submit();
+    await screen.findByText(expected);
+    expect(screen.queryByText(new RegExp(message))).toBeNull();
+    expect(screen.queryByText(/relevo registrado/i)).toBeNull();
+  });
+
+  it("22023 con un texto desconocido → mensaje genérico en castellano, sin el texto del servidor", async () => {
+    setup({ rpcResults: { create_handover: { data: null, error: { code: "22023", message: "some new server rule" } } } });
+    type(/^incidencias/i, "Fuga en 204");
+    submit();
+    await screen.findByText(/el servidor ha rechazado el relevo/i);
+    expect(screen.queryByText(/some new server rule/)).toBeNull();
   });
 
   it("al registrar no garantiza que el siguiente turno lo verá: explica que quedan pendientes hasta resolverse", async () => {

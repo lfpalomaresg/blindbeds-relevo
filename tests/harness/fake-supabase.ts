@@ -33,7 +33,7 @@ export interface FakeSupabaseOptions {
   /** Error a devolver en createSignedUrl. */
   signedUrlError?: { message: string } | null;
   /** Resultado de supabase.rpc(nombre) por función. Por defecto { data: true, error: null }. */
-  rpcResults?: Record<string, { data: unknown; error: { message: string } | null }>;
+  rpcResults?: Record<string, { data: unknown; error: { message: string; code?: string } | null }>;
 }
 
 export interface RpcCall {
