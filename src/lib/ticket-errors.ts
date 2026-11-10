@@ -64,3 +64,7 @@ export function createTicketErrorMessage(error: RpcError): string {
 /** Mensaje para un fallo al subir la foto a Storage: siempre este, nunca el texto del servidor. */
 export const TICKET_PHOTO_UPLOAD_ERROR =
   "No se pudo subir la foto. Revisa la conexión y vuelve a intentarlo, o crea el parte sin foto.";
+
+/** Mensaje cuando el navegador no puede leer la foto elegida (el fichero cambió o ya no existe). */
+export const TICKET_PHOTO_READ_ERROR =
+  "No se pudo leer la foto. Vuelve a elegirla, o crea el parte sin foto.";
