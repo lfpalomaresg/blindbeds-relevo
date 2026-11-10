@@ -52,6 +52,7 @@ describe("TicketDetail: errores de change_ticket_status", () => {
     const alert = await clickInProgress();
     expect(alert.textContent).toMatch(/vuelve a iniciar sesión/i);
     expect(alert.textContent).not.toMatch(/authentication/);
+    expect(alert.textContent).toMatch(/no tienes acceso a este parte o tu sesión caducó/i);
   });
 
   it("22023 dice que el cambio no está permitido, sin el texto del servidor", async () => {

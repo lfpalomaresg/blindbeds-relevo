@@ -160,6 +160,7 @@ describe("TicketList", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/vuelve a iniciar sesión/i);
     expect(alert.textContent).not.toMatch(/authentication/);
+    expect(alert.textContent).toMatch(/no tienes acceso a este parte o tu sesión caducó/i);
   });
 
   it("una transición rechazada (22023) da un mensaje propio, sin el texto del servidor", async () => {
