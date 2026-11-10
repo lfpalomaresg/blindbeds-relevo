@@ -271,6 +271,30 @@ usuarios de la app no.
 
 Ejecución manual puntual: `select public.purge_expired_handovers();`.
 
+### Retención del rastro de borrados (2 años, provisional)
+
+`public.purge_expired_item_deletions()` (`000019_item_deletions_retention.sql`)
+borra los asientos de `handover_item_deletions` con más de 2 años de **todos**
+los hoteles y devuelve cuántos borró. Mismos permisos que la de relevos:
+operador, `service_role` o `pg_cron`; los usuarios de la app no. El plazo de 2
+años es provisional (round 3 de automejora, 10/11/2026), pendiente de
+confirmar por el operador.
+
+**La migración no programa nada.** Para activarla (una vez por proyecto, con
+OK del operador), con `pg_cron` ya activo:
+
+```sql
+-- Todos los días a las 03:30 UTC.
+select cron.schedule(
+  'relevo-purge-expired-item-deletions',
+  '30 3 * * *',
+  $$select public.purge_expired_item_deletions()$$
+);
+```
+
+Comprobar y parar como en «Retención de relevos» (`cron.job`,
+`cron.job_run_details`, `cron.unschedule`).
+
 ### Retención de fotos de averías (90 días)
 
 Los partes **no se borran**: se cierran y se conservan como histórico. Lo que
