@@ -107,12 +107,40 @@ describe("TicketList", () => {
     expect(fake.callsTo("maintenance_tickets", "select")).toHaveLength(2);
   });
 
-  it("si la base de datos rechaza el cambio, muestra el error", async () => {
-    setup({ user: { id: "user-mant" }, rpcResults: { change_ticket_status: { data: null, error: { message: "permission denied" } } } });
+  it("si la base de datos rechaza el cambio, muestra un error propio sin el texto del servidor", async () => {
+    setup({
+      user: { id: "user-mant" },
+      rpcResults: { change_ticket_status: { data: null, error: { message: "permission denied for table maintenance_tickets" } } },
+    });
     const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
     fireEvent.click(card.getByRole("button", { name: /^cerrar$/i }));
-    await screen.findByRole("alert");
-    expect(screen.getByRole("alert").textContent).toMatch(/no se pudo actualizar/i);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no se pudo cambiar el estado/i);
+    expect(alert.textContent).not.toMatch(/permission|maintenance_tickets/);
+  });
+
+  it("sin sesión válida (42501) pide volver a iniciar sesión, sin el texto del servidor", async () => {
+    setup({
+      user: { id: "user-mant" },
+      rpcResults: { change_ticket_status: { data: null, error: { code: "42501", message: "authentication required" } } },
+    });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    fireEvent.click(card.getByRole("button", { name: /^en curso$/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/vuelve a iniciar sesión/i);
+    expect(alert.textContent).not.toMatch(/authentication/);
+  });
+
+  it("una transición rechazada (22023) da un mensaje propio, sin el texto del servidor", async () => {
+    setup({
+      user: { id: "user-mant" },
+      rpcResults: { change_ticket_status: { data: null, error: { code: "22023", message: "invalid ticket status transition: abierto -> en_curso" } } },
+    });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    fireEvent.click(card.getByRole("button", { name: /^en curso$/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no está permitido/i);
+    expect(alert.textContent).not.toMatch(/invalid|transition/);
   });
 
   it("si el cambio se aplica, no muestra ningún aviso", async () => {
