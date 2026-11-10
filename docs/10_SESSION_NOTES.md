@@ -4,6 +4,53 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-10 — Round 1 de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
+
+**Hecho**
+- Auditoría: los cuatro MUST del encargo d1 (relevo atómico por RPC, foto por
+  URL firmada, «en curso» por defecto, código de activo manual) **ya estaban en
+  main y en producción** (000006/000014, `TicketPhoto` 300 s, filtro «Abiertos y
+  en curso», campo «Código del activo»). No se rehicieron. Línea base: 647/647
+  tests (con Postgres), tsc 0, lint 0.
+- **Commit `18e5337`:** `000016_delete_handover_item.sql`
+  — el admin de un hotel activo borra un bloque de un relevo de su hotel
+  (security definer; true/false sin revelar si existe; cabecera conservada; sin
+  DELETE directo). Botón «Borrar» con confirmación en `/handover/<id>` solo para
+  admin. Runbook: procedimiento de incidente (dato sensible colado). Tests
+  vistos en rojo (BD 6/7, UI 3/7) → 658/658.
+- **Sin commitear tras tres revisiones (guardado en `git stash` del repo):**
+  - Bucle 2 — `000015_handover_limits.sql`: `create_handover` aplica en el
+    servidor ≤ 4 ítems, uno por bloque y ≤ 2000 caracteres contados como
+    `String.length` (UTF-16), con cota barata antes de recorrer el texto. Las
+    tres revisiones encontraron fallos reales, todos corregidos en el stash
+    (emojis, coste de `regexp_split_to_table`, test de 5 ítems que no detectaba
+    la mutación). 654/654 con el cambio.
+    `stash` «r1-bucle2: 000015…».
+  - Bucle 4 — runbook/README alineados con el código (relevo atómico, foto
+    opcional, sin notificaciones, verificación de URL firmada). La revisión
+    señaló imprecisiones (actualización en tiempo real, idempotencia, causas
+    del `false` de `resolve_handover_item`), corregidas en el stash
+    «r1-bucle4: runbook/README…».
+
+**Pendiente**
+- Decisión del operador: cuándo aplicar `000016` en `relevo` (sin la migración,
+  el botón «Borrar» muestra «No se pudo borrar el bloque»; el resto no cambia).
+- Decisión del operador: qué hacer con los stashes de los bucles 2 y 4.
+- `PendingItems`: `resolve_handover_item` devuelve `false` también con hotel
+  suspendido o membresía perdida, y la UI dice «ya estaba resuelto por otra
+  persona» y oculta el ítem: mensaje engañoso (hallazgo del careo del bucle 4).
+- `create_handover` no es idempotente: un error de red tras el commit + reintento
+  duplica el relevo (clave de idempotencia desde el cliente).
+
+- Abierto: el borrado del admin no deja traza en la base de datos. Propuesta:
+  tabla de auditoría con quién, cuándo, `handover_id` y bloque borrado (sin el
+  contenido), escrita por la propia RPC.
+
+**Decidido**
+- El borrado del admin es por bloque y conserva la cabecera del relevo (queda
+  constancia de que hubo relevo).
+- Lo no commiteado tras tres revisiones queda en stash, fuera de la rama.
+
 ## 2026-11-02 — Subdominio relevo.blindbeds.com y retención programada (Claude Code)
 
 **Hecho**
