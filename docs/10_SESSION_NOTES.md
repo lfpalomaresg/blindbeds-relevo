@@ -4,6 +4,60 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-10 — Round 3 de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
+
+**Hecho**
+- Línea base al empezar: 675 tests, tsc y lint en verde (ejecución local con
+  Postgres). Al cerrar: 690 tests, tsc y lint en verde.
+- `0f63d84` — runbook § Incidente: retirada la vía de borrado por SQL (no
+  dejaba asiento en `handover_item_deletions`; el SQL Editor no identifica a
+  la persona). El borrado es el de la app (RPC, `deleted_by` de la sesión).
+  Sin admin disponible u hotel no activo: «borrado pendiente» en el registro
+  del incidente, con comprobación del job de purgado y de su última pasada.
+- `61db962` — runbook: incidencias típicas del relevo al día y «Relevos sin
+  bloques» (consulta de solo lectura con los asientos del rastro) en lugar de
+  «Borrar un relevo huérfano» (delete por SQL sin rastro).
+- `426891c` — runbook §2: registrar (`create_handover`, una transacción,
+  límites de `000017`) y resolver (`resolve_handover_item`) según el código.
+- `6099754` — `000019_item_deletions_retention.sql`:
+  `purge_expired_item_deletions()` borra los asientos del rastro con más de 2
+  años (security invoker; solo operador, `pg_cron` o `service_role`). No
+  programa nada; el `cron.schedule` está en el runbook. ACL en
+  `grants.test.ts` y reaplicación tras `000011` documentada.
+- `b6f4b7c` — `HandoverForm`: los 22023 de `create_handover` se muestran en
+  castellano; 42501 y el resto, con mensajes propios. Nunca se muestra el
+  texto del servidor. Test de sincronía con la definición vigente de
+  `create_handover`.
+- `0162aa3` — test de la secuencia de reaplicación 000011 → 000013 → 000014 →
+  000016 → 000017 → 000018 → 000019 (límites, rastro y purga activos) y
+  párrafo con el orden en `20_ACTIVACION_SUPABASE.md`.
+
+**Pendiente**
+- Plazo de 2 años del rastro de borrados: provisional, pendiente de
+  confirmación del operador. El `cron.schedule` de la purga depende de esa
+  confirmación y de aplicar `000019`; a 10/11/2026 no está programado.
+- Migraciones `000016` a `000019`: solo como ficheros. Estado a 10/11/2026:
+  sin aplicar en `relevo`.
+- Decisión abierta del operador: borrado de un bloque cuando no hay admin
+  disponible o el hotel no está activo (dos variantes revisadas y no
+  aprobadas en este round: SQL con asiento atribuido por id, y cuenta de
+  incidentes con membership admin temporal; la segunda deja un `admin` que
+  depende de una baja manual).
+- Vista de solo lectura del rastro de borrados para el admin en `/handover`:
+  no hecha en este round.
+- `TicketList` y `TicketDetail` muestran `rpcError.message` tal cual (mismo
+  patrón que se corrigió en `HandoverForm`).
+- `create_handover` sigue sin idempotencia (decisión de arquitectura abierta).
+
+**Decidido**
+- En el runbook ningún procedimiento borra bloques ni relevos por SQL: el
+  único borrado manual documentado es el de la app, con asiento.
+- Mensajes de error de `create_handover`: traducción por texto exacto del
+  `raise` (22023) y genéricos para lo demás; el detalle del servidor no se
+  muestra al usuario.
+
+---
+
 ## 2026-11-10 — Round 2 de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
 
 **Hecho**
