@@ -105,11 +105,12 @@ sale con 1 en vez de decir «Setup completo».
 | `000017_handover_limits.sql` | `create_handover` aplica en el servidor los límites de la UI: como mucho 4 ítems, uno por bloque y 2000 caracteres por ítem (error 22023). Redefine la función de 000014, así que va después de ella: tras reaplicar 000014, reaplicar también esta. Idempotente; no cambia la app. (Numerada 000017 para no quedar por detrás de 000016; no existe 000015.) |
 | `000018_handover_item_deletions.sql` | Rastro de los borrados: tabla `handover_item_deletions` (quién, cuándo, relevo, ítem y bloque; sin el contenido borrado) que escribe `delete_handover_item` en la misma transacción. Solo la lee el admin de un hotel activo; la app no la escribe. Redefine la función de 000016: tras reaplicar 000011 o 000016, reaplicar también esta. Idempotente. |
 | `000019_item_deletions_retention.sql` | Función `purge_expired_item_deletions()`: borra los asientos del rastro de borrados con más de 2 años (plazo provisional, pendiente de confirmar por el operador). Solo operador, `pg_cron` o `service_role`. No programa nada: el `cron.schedule` está en el runbook (§ Retención del rastro de borrados). Tras reaplicar 000011 (o tras un `grant ... on all functions` manual), reaplicar también esta para retirar de nuevo `execute` a `anon` y `authenticated`. Idempotente; no cambia la app. |
+| `000020_item_deletion_log.sql` | Función `handover_item_deletion_log(org)`: vista de solo lectura del rastro de borrados para la pantalla de relevos. Devuelve fecha del borrado, email de quien borró, relevo (id, fecha, departamento, turno) y bloque; nunca el contenido borrado. Solo da filas al admin de un hotel activo y de su hotel (misma comprobación que la policy de 000018); al resto, cero filas. `execute` solo para `authenticated`. Tras reaplicar 000011, reaplicar también esta. Idempotente. |
 
 Orden completo al reaplicar 000011 sobre un proyecto ya migrado: 000011 →
-000013 → 000014 → 000016 → 000017 → 000018 → 000019. Lo comprueba
-`tests/db/reapply-sequence.test.ts` (límites, rastro de borrados y purga siguen
-activos al final). Reaplicar solo 000011 y 000014 quita los límites y devuelve
+000013 → 000014 → 000016 → 000017 → 000018 → 000019 → 000020. Lo comprueba
+`tests/db/reapply-sequence.test.ts` (límites, rastro de borrados, purga y
+vista del rastro siguen activos al final). Reaplicar solo 000011 y 000014 quita los límites y devuelve
 a la app el privilegio de escritura sobre el rastro; RLS sigue frenando esa
 escritura, pero la ACL queda distinta de la de diseño.
 

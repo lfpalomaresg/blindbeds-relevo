@@ -51,6 +51,8 @@ const FUNCTION_ACL: Record<string, Expected> = {
   "public.ticket_author_emails(uuid, uuid[])": { anon: false, authenticated: true, service_role: false },
   "public.purge_expired_handovers()": { anon: false, authenticated: false, service_role: true },
   "public.purge_expired_item_deletions()": { anon: false, authenticated: false, service_role: true },
+  // 000020: rastro de borrados de solo lectura para el admin; exige auth.uid().
+  "public.handover_item_deletion_log(uuid)": { anon: false, authenticated: true, service_role: false },
 };
 
 async function publicTables(db: Client): Promise<string[]> {
@@ -163,11 +165,11 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
     await expectFunctionAcl(db);
   });
 
-  it("B) tras la deriva del grant manual, reaplicar 000011 + 000013…000019 restaura las ACL de funciones", async () => {
+  it("B) tras la deriva del grant manual, reaplicar 000011 + 000013…000020 restaura las ACL de funciones", async () => {
     const db = await database("grants_drift");
     await db.query(MANUAL_DRIFT);
     expect(await canExecute(db, "anon", "public.handover_author_emails(uuid, uuid[])")).toBe(true);
-    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018"), migrationFile("000019")]);
+    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018"), migrationFile("000019"), migrationFile("000020")]);
     await expectFunctionAcl(db);
   });
 

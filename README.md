@@ -37,7 +37,7 @@ src/
 ├── types/              # Tipos compartidos
 └── hooks/              # useAuth
 supabase/
-├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico · 000006 relevo atómico · 000007 emails de autores de relevos · 000008 retención de relevos (90 días) · 000009 habitación/zona · 000010 emails de autores de partes · 000011 grants · 000012 guarda de partes · 000013 partes solo por RPC · 000014 relevos solo por RPC · 000016 borrado de un ítem por el admin · 000017 límites del relevo en el servidor · 000018 rastro de borrados · 000019 retención del rastro (2 años, provisional) (no hay 000015)
+├── migrations/         # 000001 baseline · 000003 policies de storage · 000004 FK por org · 000005 cambio de estado atómico · 000006 relevo atómico · 000007 emails de autores de relevos · 000008 retención de relevos (90 días) · 000009 habitación/zona · 000010 emails de autores de partes · 000011 grants · 000012 guarda de partes · 000013 partes solo por RPC · 000014 relevos solo por RPC · 000016 borrado de un ítem por el admin · 000017 límites del relevo en el servidor · 000018 rastro de borrados · 000019 retención del rastro (2 años, provisional) · 000020 vista del rastro para el admin (no hay 000015)
 └── variants/           # 000002: variante «proyecto compartido APPCC», fuera de la secuencia de migraciones
 tests/
 ├── db/                 # Matriz RLS sobre Postgres efímero (initdb + pg_ctl)

@@ -1,11 +1,12 @@
 /**
  * Secuencia de reaplicación documentada en docs/20_ACTIVACION_SUPABASE.md:
- * 000011 (grants) → 000013 → 000014 → 000016 → 000017 → 000018 → 000019, sobre una base
+ * 000011 (grants) → 000013 → 000014 → 000016 → 000017 → 000018 → 000019 → 000020, sobre una base
  * ya migrada. Comprueba que, tras reaplicarla, siguen activos:
  *   - los límites de create_handover en el servidor (000017, error 22023);
  *   - el rastro de borrados (000018): delete_handover_item deja asiento y la
  *     app no escribe handover_item_deletions;
- *   - la purga del rastro solo para operador/service_role (000019).
+ *   - la purga del rastro solo para operador/service_role (000019);
+ *   - la vista del rastro solo para authenticated (000020; dentro, solo el admin).
  * Y, como contraste, que reaplicar solo 000011 y 000014 quita los límites y
  * devuelve a la app el PRIVILEGIO de escritura sobre el rastro (deriva de ACL;
  * RLS sigue frenando el insert): por eso la secuencia entera.
@@ -23,7 +24,7 @@ const ORG_A = "00000000-0000-0000-0000-00000000000a";
 const staffA = asUser("aaaaaaaa-0000-0000-0000-00000000001a");
 const adminA = asUser("aaaaaaaa-0000-0000-0000-00000000003a");
 
-const SEQUENCE = ["000011", "000013", "000014", "000016", "000017", "000018", "000019"];
+const SEQUENCE = ["000011", "000013", "000014", "000016", "000017", "000018", "000019", "000020"];
 const FIVE_ITEMS = JSON.stringify(
   ["pendientes", "vips", "incidencias", "avisos", "pendientes"].map((block) => ({ block, content: "Texto ficticio" })),
 );
@@ -43,7 +44,7 @@ async function appCanWriteLog(db: Client): Promise<boolean> {
 
 const available = gatePg("reapply-sequence.test");
 
-describe.skipIf(!available)("reaplicación 000011 → 000013 → 000014 → 000016 → 000017 → 000018 → 000019", () => {
+describe.skipIf(!available)("reaplicación 000011 → 000013 → 000014 → 000016 → 000017 → 000018 → 000019 → 000020", () => {
   let pg: EphemeralPostgres;
   let admin: Client;
   const opened: Client[] = [];
@@ -118,6 +119,16 @@ describe.skipIf(!available)("reaplicación 000011 → 000013 → 000014 → 0000
       return { n, left };
     });
     expect(purged).toEqual({ n: 1, left: 1 });
+
+    // 000020: la vista del rastro la ejecuta authenticated, no service_role ni anon.
+    const LOG_FN = "public.handover_item_deletion_log(uuid)";
+    const acl = await db.query<{ anon: boolean; auth: boolean; svc: boolean }>(
+      `select has_function_privilege('anon', $1, 'EXECUTE') as anon,
+              has_function_privilege('authenticated', $1, 'EXECUTE') as auth,
+              has_function_privilege('service_role', $1, 'EXECUTE') as svc`,
+      [LOG_FN],
+    );
+    expect(acl.rows[0]).toEqual({ anon: false, auth: true, svc: false });
   });
 
   it("contraste: reaplicar solo 000011 y 000014 quita los límites y devuelve a la app el privilegio (no la escritura efectiva) sobre el rastro", async () => {
