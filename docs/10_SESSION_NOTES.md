@@ -4,6 +4,47 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-10 — Ronda 6 de automejora (Claude Code, desatendido) · rama `mejora/r6-relevo`
+
+**Hecho**
+- Línea base al empezar (`main@7a03117`): 715 tests (con Postgres efímero), tsc
+  y lint en verde, `npm audit --omit=dev` sin vulnerabilidades. Al cerrar: 728
+  tests, tsc y lint en verde.
+- `dd7a075` — cabeceras de seguridad en todas las respuestas
+  (`next.config.ts`): `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`,
+  `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` y
+  `Permissions-Policy` con la cámara solo para el propio origen (escáner QR).
+  Estado a 10/11/2026 en producción, antes de este cambio: solo HSTS, así que
+  la app se podía enmarcar desde otra web (clickjacking). Comprobado en local
+  con `next build` + `next start` en `/login`, `/dashboard` (307 del proxy) y
+  `/manifest.json`.
+- `8c2367a` — `TicketForm`: los errores de `create_ticket` y de la subida de
+  la foto salen con mensajes propios; nunca el texto del servidor. Los textos
+  22023 y 42501 traducidos están atados por test a la definición vigente de
+  `create_ticket` (`000013`).
+
+**Pendiente**
+- `PendingItems` (doble toque en «Resolver» que manda dos RPC y acaba en un
+  aviso falso de «ya estaba resuelto por otra persona»; error del servidor
+  mostrado tal cual): cambio con tests hecho, sin commit en esta ronda. La
+  última revisión señaló que un 42501 con sesión válida (acceso insuficiente)
+  no debe decir «vuelve a iniciar sesión». Parche fuera del repo, en la carpeta
+  de la ronda.
+- CSP completa (scripts y estilos): requiere nonce desde el proxy; no abordada.
+- Restos de la plantilla de Next en `public/` (`file.svg`, `globe.svg`,
+  `next.svg`, `vercel.svg`, `window.svg`) sin uso.
+- Las cabeceras llegan a producción con el despliegue de esta rama; después,
+  comprobación con `curl -sI https://relevo.blindbeds.com/login`.
+- Siguen abiertas: idempotencia de `create_handover`, borrado de un bloque sin
+  admin disponible y `cron.schedule` de la purga del rastro (plazo de 2 años,
+  nota de rondas del 10/11/2026 en AI_OS).
+
+**Decidido**
+- La CSP de esta ronda solo fija `frame-ancestors`: Next inyecta scripts
+  inline sin nonce y una CSP de scripts sin nonce rompería la app.
+
+---
+
 ## 2026-11-10 — Round 3-bis de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
 
 **Hecho**
