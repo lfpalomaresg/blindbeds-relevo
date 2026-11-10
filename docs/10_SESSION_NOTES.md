@@ -4,6 +4,44 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-10 — Round 2 de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
+
+**Hecho**
+- Línea base al empezar: suite, tsc y lint en verde (ejecución local con Postgres).
+- `a0a11e4` — límites de `create_handover` en el servidor (≤ 4 ítems, uno por
+  bloque, ≤ 2000 unidades UTF-16; 22023). El stash del round 1 (`000015`) pasa
+  a llamarse **`000017_handover_limits.sql`**: redefine la función de `000014`
+  y así queda detrás de `000016` en el orden de aplicación. No existe `000015`.
+  Sin cambio de UI (la UI ya validaba lo mismo).
+- `5a25378` — `000018_handover_item_deletions.sql`: tabla de rastro de los
+  borrados (org, relevo, ítem, bloque, quién, cuándo; sin el contenido) que
+  escribe `delete_handover_item` en la misma transacción. RLS: solo la lee el
+  admin de un hotel activo; la app no la escribe. Sobrevive a la retención.
+- `c481cf7` — `PendingItems`: cuando `resolve_handover_item` devuelve `false`,
+  la app vuelve a leer el ítem; «ya estaba resuelto» solo si se lee resuelto;
+  si no se ve (hotel suspendido, sin membresía) o sigue abierto, error y el
+  ítem sigue en la lista. Sin cambio de base de datos.
+- `e6d69b2` runbook §3 (partes) y `cd2f149` README (lista de migraciones).
+- Los dos stashes del round 1 eliminados tras convertirse en commits/ficheros.
+
+**Pendiente**
+- Runbook §2 (relevo, incidente con asiento en `handover_item_deletions`,
+  incidencias típicas, relevos sin bloques): sin commit en este round (tres
+  revisiones NO APTO).
+- Migraciones `000016`, `000017` y `000018`: solo como ficheros; su orden por
+  nombre es el de aplicación. Estado a 10/11/2026: sin aplicar en `relevo`.
+  Las dependencias de reaplicación están en `docs/20_ACTIVACION_SUPABASE.md`.
+- `create_handover` sigue sin idempotencia (clave de cliente).
+- El rastro no tiene pantalla: hoy se consulta por SQL.
+
+**Decidido**
+- Renumerar a `000017` en vez de mantener `000015`: aplicar por orden de
+  nombre no deja una migración detrás de otra ya aplicada.
+- `resolve_handover_item` conserva su firma (boolean): distinguir los casos en
+  el cliente evita coordinar migración y despliegue.
+
+---
+
 ## 2026-11-10 — Round 1 de automejora (Claude Code, desatendido) · rama `mejora/r1-relevo`
 
 **Hecho**
