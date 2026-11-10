@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { changeTicketStatusErrorMessage } from "@/lib/ticket-errors";
@@ -17,6 +17,9 @@ const FILTERS: { value: Filter; label: string }[] = [
   ...TICKET_STATUSES,
 ];
 
+const NO_SESSION_ON_CLIENT =
+  "No se pudo cambiar el estado del parte: no hay sesión activa. Vuelve a iniciar sesión; si sigue igual, avisa al administrador.";
+
 interface TicketListProps {
   orgId: string;
 }
@@ -28,6 +31,10 @@ export function TicketList({ orgId }: TicketListProps) {
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState("");
+  // Partes con un cambio de estado en curso: un doble toque no manda otra RPC
+  // (la segunda devolvería false y saldría «cambió de estado en otro dispositivo»).
+  const inFlight = useRef(new Set<string>());
+  const [changing, setChanging] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     let active = true;
@@ -48,9 +55,24 @@ export function TicketList({ orgId }: TicketListProps) {
   }, [orgId, filter, tick, supabase]);
 
   async function updateStatus(ticketId: string, currentStatus: TicketStatus, newStatus: TicketStatus) {
+    if (inFlight.current.has(ticketId)) return;
+    inFlight.current.add(ticketId);
+    setChanging(new Set(inFlight.current));
+    try {
+      await updateStatusOnce(ticketId, currentStatus, newStatus);
+    } finally {
+      inFlight.current.delete(ticketId);
+      setChanging(new Set(inFlight.current));
+    }
+  }
+
+  async function updateStatusOnce(ticketId: string, currentStatus: TicketStatus, newStatus: TicketStatus) {
     setError("");
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
+    if (!userData.user) {
+      setError(NO_SESSION_ON_CLIENT);
+      return;
+    }
 
     // Estado + traza en ticket_updates en una sola transacción (migración
     // 000005). Solo cambia si el parte sigue en el estado que se veía: una
@@ -146,16 +168,18 @@ export function TicketList({ orgId }: TicketListProps) {
             <div className="flex gap-2">
               {ticket.status === "abierto" && (
                 <button
-                  onClick={() => updateStatus(ticket.id, ticket.status, "en_curso")}
-                  className="px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                  onClick={() => void updateStatus(ticket.id, ticket.status, "en_curso")}
+                  disabled={changing.has(ticket.id)}
+                  className="px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 disabled:opacity-50"
                 >
                   En curso
                 </button>
               )}
               {(ticket.status === "abierto" || ticket.status === "en_curso") && (
                 <button
-                  onClick={() => updateStatus(ticket.id, ticket.status, "cerrado")}
-                  className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+                  onClick={() => void updateStatus(ticket.id, ticket.status, "cerrado")}
+                  disabled={changing.has(ticket.id)}
+                  className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
                 >
                   Cerrar
                 </button>
