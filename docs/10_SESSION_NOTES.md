@@ -4,6 +4,46 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-10 — Ronda 7 de automejora (Claude Code, desatendido) · rama `mejora/r7-relevo`
+
+**Hecho**
+- Línea base al empezar (`main@9fa9936`): 728 tests (con Postgres efímero), tsc
+  y lint en verde, `npm audit --omit=dev` sin vulnerabilidades. Al cerrar: 738
+  tests, tsc y lint en verde.
+- `360a8b5` — `PendingItems`: guarda por pendiente y botón desactivado mientras
+  va `resolve_handover_item` (un doble toque ya no acaba en el aviso falso de
+  «ya estaba resuelto por otra persona»); errores sin el texto del servidor. El
+  42501 nombra las dos causas posibles (sin acceso o sesión caducada), con test
+  de 42501 para un usuario válido sin permiso; sin sesión en el cliente avisa.
+- `29cf812` — `TicketList`: misma guarda en «En curso»/«Cerrar» (un doble toque
+  daba «cambió de estado en otro dispositivo»); sin sesión avisa.
+- `6b389c9` — `TicketForm`: con foto, la lectura de los primeros bytes era
+  asíncrona y ocurría antes de desactivar el botón, así que un doble toque
+  subía dos fotos y creaba dos partes. Guarda fijada antes del primer await;
+  `try/finally` para que una excepción de red no deje el botón bloqueado; foto
+  ilegible con mensaje propio. Las guardas, comprobadas por mutación.
+
+**Pendiente**
+- `change_ticket_status`: su 42501 se traduce solo como «sesión»
+  (`src/lib/ticket-errors.ts`); mismo matiz que el de `PendingItems` (también
+  puede ser falta de permiso con sesión válida).
+- `HandoverDetail`: el borrado de un bloque no tiene guarda de doble envío
+  (lo frena en parte el `confirm`).
+- CSP completa (nonce desde el proxy) y restos de la plantilla de Next en
+  `public/` (`file.svg`, `globe.svg`, `next.svg`, `vercel.svg`, `window.svg`).
+- Siguen abiertas: idempotencia de `create_handover`, borrado de un bloque sin
+  admin disponible y `cron.schedule` de la purga del rastro (plazo de 2 años,
+  nota de rondas del 10/11/2026 en AI_OS).
+- Prueba en el móvil de los tres cambios tras el despliegue (doble toque en
+  «Resolver», «Cerrar» y «Crear parte» con foto).
+
+**Decidido**
+- Para el doble envío se usa una guarda con `useRef` además de `disabled`: el
+  estado de React no se ve hasta el siguiente render y, en `TicketForm`, había
+  un `await` antes de desactivar el botón.
+
+---
+
 ## 2026-11-10 — Ronda 6 de automejora (Claude Code, desatendido) · rama `mejora/r6-relevo`
 
 **Hecho**
