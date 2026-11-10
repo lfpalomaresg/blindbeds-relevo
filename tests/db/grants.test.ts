@@ -41,6 +41,8 @@ type Expected = { anon: boolean; authenticated: boolean; service_role: boolean }
 const FUNCTION_ACL: Record<string, Expected> = {
   "public.change_ticket_status(uuid, text, text)": { anon: false, authenticated: true, service_role: true },
   "public.resolve_handover_item(uuid)": { anon: false, authenticated: true, service_role: false },
+  // 000016: borrado de un ítem por el admin; exige auth.uid().
+  "public.delete_handover_item(uuid)": { anon: false, authenticated: true, service_role: false },
   // Exige auth.uid(): service_role no tiene usuario, no la necesita.
   "public.create_ticket(uuid, text, text, text, uuid, text, text)": { anon: false, authenticated: true, service_role: false },
   // 000014: definer que exige auth.uid(); service_role no la necesita.
@@ -157,7 +159,7 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
     const db = await database("grants_drift");
     await db.query(MANUAL_DRIFT);
     expect(await canExecute(db, "anon", "public.handover_author_emails(uuid, uuid[])")).toBe(true);
-    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014")]);
+    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016")]);
     await expectFunctionAcl(db);
   });
 

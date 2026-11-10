@@ -186,9 +186,33 @@ selector: una cuenta (email) por hotel.
 
 Cada bloque del relevo lleva el aviso «Sin nombres de huéspedes ni datos de
 salud: usa el nº de habitación.» (`src/lib/privacy.ts`). Es un aviso, no un
-filtro: la app no detecta nombres. Si se cuela un dato sensible, el admin pide
-al operador que borre ese bloque concreto por SQL (acotado por `id` y
-`org_id`, igual que «Borrar un relevo huérfano»).
+filtro: la app no detecta nombres.
+
+### Incidente: se coló un dato sensible en un relevo
+
+Nombre de un huésped, dato de salud, documento… en el texto libre de un bloque.
+
+1. **Borrar el bloque cuanto antes.** Lo hace el **admin del hotel** desde la
+   app: Relevos → abrir el relevo (`/handover/<id>`) → botón **«Borrar»** junto
+   al bloque → confirmar. Por debajo llama a la RPC `delete_handover_item`
+   (`000016_delete_handover_item.sql`): solo borra bloques de relevos de su
+   hotel, staff y supervisores no ven el botón (y el servidor se lo negaría) y
+   la cabecera del relevo se conserva. Si el admin no está
+   disponible, el operador lo borra por SQL acotado por `id` **y** `org_id`
+   (igual que «Borrar un relevo huérfano»).
+2. **Comprobar** que el bloque ya no aparece en `/handover/<id>` ni en
+   «Pendientes».
+3. **Registrar el incidente** fuera de la app (fecha, hotel, qué tipo de dato,
+   quién lo detectó, cuándo se borró). **No copiar el dato** en el registro ni
+   en el chat.
+4. **Valorar con el responsable de privacidad del hotel** si hay que notificar
+   (RGPD art. 33: 72 h si hay riesgo para la persona). El hotel es el
+   responsable del tratamiento; Blindbeds, encargado.
+5. **Recordar al equipo** el aviso de minimización (nº de habitación, nunca
+   nombres ni salud).
+
+Las copias de seguridad de Supabase pueden conservar el dato hasta que roten
+(§6); anotarlo en el registro del incidente.
 
 ### Retención de relevos (90 días)
 
@@ -273,7 +297,8 @@ git). Si el Mac está dormido el lunes, launchd lo lanza al despertar.
   política `update` sobre `shift_handovers`.
 - Deshacer un «Resolver»: no hay botón. Por SQL:
   `update handover_items set resolved = false, resolved_by = null, resolved_at = null where id = '<id>';`
-- Editar o borrar un relevo enviado: no hay UI ni política `delete`.
+- Editar un relevo enviado: no hay UI. Borrar: solo un bloque, y solo el admin
+  (ver «Incidente: se coló un dato sensible»).
 - Notificaciones (email/push) al siguiente turno: no existen; el texto «El
   siguiente turno lo verá al entrar» (`HandoverForm.tsx:114`) significa que lo
   verá cuando abra el panel.

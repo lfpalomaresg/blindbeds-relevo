@@ -34,6 +34,7 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
       "000012_ticket_guard.sql",
       "000013_ticket_rpc.sql",
       "000014_handover_item_rpc.sql",
+      "000016_delete_handover_item.sql",
     ]);
   });
 });
