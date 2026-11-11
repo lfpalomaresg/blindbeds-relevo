@@ -4,6 +4,57 @@ Formato: **Hecho · Pendiente · Decidido**. La entrada más reciente arriba.
 
 ---
 
+## 2026-11-11 — Ronda 8 de automejora (Claude Code, desatendido) · rama `mejora/r8-relevo`
+
+Parte de `mejora/r7-relevo` (PR #21, sin fusionar); el PR de esta ronda va
+contra esa rama.
+
+**Hecho**
+- Línea base al empezar (`mejora/r7-relevo@1dd56a0`): 738 tests (con Postgres
+  efímero), tsc y lint en verde. Al cerrar: 747 tests, tsc y lint en verde.
+- `17838af` — `change_ticket_status`: su 42501 ya no se explica solo como
+  «sesión»; el mensaje dice «no tienes acceso a este parte o tu sesión
+  caducó». En la definición vigente (`000013`) el único 42501 propio es el de
+  `auth.uid()` nulo; otro 42501 posible es la falta de permiso sobre la
+  función (ACL; hoy `EXECUTE` está concedido a `authenticated`). Un parte de
+  otra organización no da 42501: la función devuelve `false`. Probado en
+  `ticket-errors`, `TicketList` y `TicketDetail` (el caso de ACL, con un error
+  fabricado).
+- `0438f30` — `HandoverDetail`: guarda por bloque con `useRef` y botón
+  desactivado mientras va `delete_handover_item` (un doble toque mandaba dos
+  RPC y la segunda daba «No se pudo borrar» con el bloque ya borrado). Una
+  excepción de red muestra el aviso propio y libera el botón. Guarda
+  comprobada por mutación.
+- `08eaaac` — fuera los SVG de la plantilla de Next en `public/` (`file.svg`,
+  `globe.svg`, `next.svg`, `vercel.svg`, `window.svg`); un test exige que cada
+  fichero de `public/` se use en `src/`, el manifest o el service worker.
+
+**Pendiente**
+- `TicketDetail` (cambio de estado): sin guarda síncrona de doble envío (un
+  doble toque da el aviso falso de «otro dispositivo»), una excepción de red
+  deja «Guardando» para siempre, y una lectura fallida se muestra como «Parte
+  no encontrado». Cambio con 13 tests hecho, sin commit en esta ronda: la
+  última revisión señaló que, al cambiar `ticketId` sin desmontar, los botones
+  del parte anterior siguen activos durante la carga del nuevo. Parche fuera
+  del repo, en la carpeta de la ronda. Enfoque posible: `key={id}` en
+  `src/app/tickets/[id]/page.tsx` o vista bloqueada mientras carga otro parte.
+- `TicketList`: la guarda se libera en `finally`, pero una excepción de red de
+  la RPC queda sin manejar (sin aviso).
+- CSP completa (nonce desde el proxy): no abordada.
+- Siguen abiertas: idempotencia de `create_handover`, borrado de un bloque sin
+  admin disponible y `cron.schedule` de la purga del rastro (plazo de 2 años,
+  nota de rondas del 10/11/2026 en AI_OS).
+- Prueba en el móvil tras el despliegue: doble toque en «Borrar» de un bloque
+  (como admin) y el aviso del 42501 al cambiar un parte con la sesión caducada.
+
+**Decidido**
+- El mensaje del 42501 de `change_ticket_status` sigue el mismo criterio que el
+  de `PendingItems` (R7): nombra las dos causas en vez de suponer una.
+- Ante un fallo de red al borrar un bloque no se recarga: el aviso indica que
+  al recargar la página se ve si el bloque sigue ahí.
+
+---
+
 ## 2026-11-10 — Ronda 7 de automejora (Claude Code, desatendido) · rama `mejora/r7-relevo`
 
 **Hecho**
