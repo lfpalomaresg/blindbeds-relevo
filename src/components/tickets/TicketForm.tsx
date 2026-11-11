@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import {
   LIMITS,
@@ -10,7 +10,7 @@ import {
   validatePhoto,
   validateTicketInput,
 } from "@/lib/validation";
-import { TICKET_PHOTO_UPLOAD_ERROR, createTicketErrorMessage } from "@/lib/ticket-errors";
+import { TICKET_PHOTO_READ_ERROR, TICKET_PHOTO_UPLOAD_ERROR, createTicketErrorMessage } from "@/lib/ticket-errors";
 import { TICKET_PRIORITIES } from "@/types";
 import type { TicketPriority } from "@/types";
 import { QRScanner } from "./QRScanner";
@@ -43,6 +43,9 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Envío en curso, fijado antes del primer await: con foto, la lectura de los
+  // primeros bytes es asíncrona y un doble toque creaba dos partes.
+  const submitting = useRef(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -105,8 +108,23 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
+    setSaving(true);
     setError("");
+    try {
+      await submitOnce();
+    } catch {
+      // Excepción de red o del navegador: puede ser ambigua (el parte pudo
+      // crearse y perderse la respuesta), así que mismo texto que el genérico.
+      setError(createTicketErrorMessage({}));
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+    }
+  }
 
+  async function submitOnce() {
     const validated = validateTicketInput({
       title,
       description,
@@ -125,19 +143,22 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
       return;
     }
     if (photo && photoCheck?.ok) {
-      const head = new Uint8Array(await photo.slice(0, PHOTO_SNIFF_BYTES).arrayBuffer());
+      let head: Uint8Array;
+      try {
+        head = new Uint8Array(await photo.slice(0, PHOTO_SNIFF_BYTES).arrayBuffer());
+      } catch {
+        setError(TICKET_PHOTO_READ_ERROR);
+        return;
+      }
       if (!photoBytesMatchType(photoCheck.value.contentType, head)) {
         setError("Ese fichero no es una foto válida. Usa una foto JPEG, PNG o WebP.");
         return;
       }
     }
 
-    setSaving(true);
-
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
       setError("No hay sesión activa");
-      setSaving(false);
       return;
     }
 
@@ -151,7 +172,6 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
 
       if (uploadError) {
         setError(TICKET_PHOTO_UPLOAD_ERROR);
-        setSaving(false);
         return;
       }
       photoPath = filePath;
@@ -174,11 +194,9 @@ export function TicketForm({ orgId, assetId: initialAssetId, onCreated }: Ticket
       // se perdió la respuesta). Si quedó huérfana, el barrido del servidor la
       // borra a las 24 h (scripts/purge-ticket-photos.mjs).
       setError(createTicketErrorMessage(insertError));
-      setSaving(false);
       return;
     }
 
-    setSaving(false);
     setDone(true);
     onCreated?.();
   }

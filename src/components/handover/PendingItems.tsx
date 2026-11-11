@@ -1,9 +1,19 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { HandoverItem } from "@/types";
 import { HANDOVER_BLOCKS } from "@/types";
+
+// Errores de resolve_handover_item. Un ítem ajeno o ya resuelto no es error:
+// la función devuelve false. 42501 (insufficient_privilege) llega sin sesión en
+// el servidor y también con un usuario sin permiso de ejecución (token caducado
+// que entra como anon, EXECUTE retirado): el mensaje nombra ambas causas.
+const NO_SESSION =
+  "No se pudo resolver el pendiente: no hay sesión activa. Vuelve a iniciar sesión; si sigue igual, avisa al responsable del hotel.";
+const NO_ACCESS =
+  "No se pudo resolver el pendiente: no tienes acceso a este pendiente o tu sesión caducó. Recarga la página; si sigue igual, avisa al responsable del hotel.";
+const GENERIC_ERROR = "No se pudo resolver el pendiente. Vuelve a intentarlo en unos segundos.";
 
 interface PendingItemsProps {
   orgId: string;
@@ -15,6 +25,10 @@ export function PendingItems({ orgId }: PendingItemsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // Pendientes con una resolución en curso: un doble toque no manda otra RPC
+  // (la segunda devolvería false y saldría «ya estaba resuelto por otra persona»).
+  const inFlight = useRef(new Set<string>());
+  const [resolving, setResolving] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     let active = true;
@@ -33,11 +47,26 @@ export function PendingItems({ orgId }: PendingItemsProps) {
   }, [orgId, supabase]);
 
   async function resolveItem(id: string) {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
+    if (inFlight.current.has(id)) return;
+    inFlight.current.add(id);
+    setResolving(new Set(inFlight.current));
+    try {
+      await resolveOnce(id);
+    } finally {
+      inFlight.current.delete(id);
+      setResolving(new Set(inFlight.current));
+    }
+  }
 
+  async function resolveOnce(id: string) {
     setError("");
     setNotice("");
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      setError(NO_SESSION);
+      return;
+    }
+
     // Migración 000014: resolve_handover_item fija quién y cuándo en la base de
     // datos y solo actúa si no estaba resuelto (devuelve false si otra persona
     // se adelantó). La app ya no hace UPDATE directo.
@@ -46,7 +75,8 @@ export function PendingItems({ orgId }: PendingItemsProps) {
     });
 
     if (updateError) {
-      setError("No se pudo resolver el pendiente: " + updateError.message);
+      // Nunca el texto del servidor: puede nombrar tablas, funciones o políticas.
+      setError(updateError.code === "42501" ? NO_ACCESS : GENERIC_ERROR);
       return;
     }
     if (changed !== true) {
@@ -105,8 +135,9 @@ export function PendingItems({ orgId }: PendingItemsProps) {
             </p>
           </div>
           <button
-            onClick={() => resolveItem(item.id)}
-            className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 shrink-0"
+            onClick={() => void resolveItem(item.id)}
+            disabled={resolving.has(item.id)}
+            className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 shrink-0"
           >
             Resolver
           </button>

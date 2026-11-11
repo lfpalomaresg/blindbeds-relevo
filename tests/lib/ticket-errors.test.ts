@@ -48,6 +48,14 @@ describe("changeTicketStatusErrorMessage", () => {
     expect(msg).not.toMatch(/authentication|required/);
   });
 
+  it("42501 no se explica solo como sesión: también cubre la falta de permiso (p. ej. sin EXECUTE)", () => {
+    const msg = changeTicketStatusErrorMessage({ code: "42501", message: "permission denied for function change_ticket_status" });
+    expect(msg).toMatch(/no tienes acceso a este parte/i);
+    expect(msg).toMatch(/sesión caducó/i);
+    expect(msg).not.toMatch(/sesión válida/i);
+    expect(msg).not.toMatch(/permission|denied|change_ticket_status/);
+  });
+
   it("22023 (transición no permitida) da un mensaje propio sin el texto del servidor", () => {
     const msg = changeTicketStatusErrorMessage({ code: "22023", message: "invalid ticket status transition: cerrado -> abierto" });
     expect(msg).toMatch(/no está permitido/i);

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../harness/fake-supabase";
 import { LIMITS } from "@/lib/validation";
@@ -157,6 +157,62 @@ describe("TicketForm", () => {
     await screen.findByText(/no es una foto válida/i);
     expect(fake.uploads).toHaveLength(0);
     expect(creates(fake)).toHaveLength(0);
+  });
+
+  // Con foto, la lectura de los primeros bytes es asíncrona y ocurría antes de
+  // desactivar el botón: un doble toque creaba dos partes con dos fotos.
+  it("un doble envío con foto sube una sola foto y crea un solo parte", async () => {
+    const fake = setup({ user: { id: "user-staff" } });
+    type(/título/i, "Grifo gotea");
+    pickPhoto(makeFile(2048, "image/jpeg"));
+    const form = screen.getByRole("button", { name: /crear parte/i }).closest("form")!;
+    act(() => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    await screen.findByText(/parte de avería creado/i);
+    expect(fake.uploads).toHaveLength(1);
+    expect(creates(fake)).toHaveLength(1);
+  });
+
+  it("si la foto no se puede leer (el fichero cambió o se borró), lo dice, no sube nada y deja reintentar", async () => {
+    const fake = setup({ user: { id: "user-staff" } });
+    type(/título/i, "Grifo gotea");
+    const file = makeFile(2048, "image/jpeg");
+    Object.defineProperty(file, "slice", {
+      value: () => ({ arrayBuffer: () => Promise.reject(new DOMException("unreadable", "NotReadableError")) }),
+    });
+    pickPhoto(file);
+    submit();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no se pudo leer la foto/i);
+    expect(alert.textContent).not.toMatch(/unreadable|NotReadable/);
+    expect(fake.uploads).toHaveLength(0);
+    expect(creates(fake)).toHaveLength(0);
+    // Reintento real: otra foto y otro envío crean exactamente un parte.
+    pickPhoto(makeFile(2048, "image/jpeg"));
+    submit();
+    await screen.findByText(/parte de avería creado/i);
+    expect(fake.uploads).toHaveLength(1);
+    expect(creates(fake)).toHaveLength(1);
+  });
+
+  it("si la red falla con una excepción, muestra un error propio y deja reintentar", async () => {
+    const fake = setup({ user: { id: "user-staff" } });
+    fake.auth.getUser.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    type(/título/i, "Grifo gotea");
+    submit();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no se pudo crear el parte/i);
+    expect(alert.textContent).not.toMatch(/fetch/i);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /crear parte/i }).hasAttribute("disabled")).toBe(false),
+    );
+    expect(creates(fake)).toHaveLength(0);
+    // Reintento real: con la red de vuelta, otro envío crea exactamente un parte.
+    submit();
+    await screen.findByText(/parte de avería creado/i);
+    expect(creates(fake)).toHaveLength(1);
   });
 
   it("si la subida falla, muestra un error propio (sin el texto del servidor) y no crea el parte", async () => {

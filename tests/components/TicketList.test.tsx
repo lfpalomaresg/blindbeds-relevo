@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../harness/fake-supabase";
 
@@ -90,12 +90,43 @@ describe("TicketList", () => {
     expect(fake.rpcCalls[0].args).toEqual({ p_ticket_id: "t2", p_from: "en_curso", p_to: "cerrado" });
   });
 
-  it("sin sesión no cambia estados", async () => {
+  it("sin sesión no cambia estados y avisa de volver a iniciar sesión", async () => {
     const fake = setup({ user: null });
     const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
     fireEvent.click(card.getByRole("button", { name: /^cerrar$/i }));
     await waitFor(() => expect(fake.auth.getUser).toHaveBeenCalled());
+    expect((await screen.findByRole("alert")).textContent).toMatch(/vuelve a iniciar sesión/i);
     expect(fake.rpcCalls).toHaveLength(0);
+  });
+
+  // Un doble toque mandaba dos RPC: la segunda devuelve false (el parte ya no
+  // está en el estado de partida) y salía «cambió de estado en otro
+  // dispositivo», que es falso: fue el mismo usuario.
+  it("un doble toque en «Cerrar» envía una sola RPC y no da el aviso de «otro dispositivo»", async () => {
+    const fake = setup({ user: { id: "user-mant" } });
+    const card = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    const button = card.getByRole("button", { name: /^cerrar$/i });
+    // Los dos clics en el mismo act: sin re-render entre ellos el botón aún no
+    // está desactivado, así que la que frena el segundo es la guarda del componente.
+    act(() => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitFor(() => expect(fake.callsTo("maintenance_tickets", "select")).toHaveLength(2));
+    await screen.findByRole("group", { name: /filtrar por estado/i });
+    expect(fake.rpcCalls.filter((c) => c.fn === "change_ticket_status")).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("mientras cambia el estado, los botones de ese parte están desactivados y los de otro no", async () => {
+    setup({ user: { id: "user-mant" } });
+    const first = within(await screen.findByRole("article", { name: "Grifo gotea" }));
+    const other = within(screen.getByRole("article", { name: "Luz fundida" }));
+    fireEvent.click(first.getByRole("button", { name: /^en curso$/i }));
+    expect(first.getByRole("button", { name: /^en curso$/i }).hasAttribute("disabled")).toBe(true);
+    expect(first.getByRole("button", { name: /^cerrar$/i }).hasAttribute("disabled")).toBe(true);
+    expect(other.getByRole("button", { name: /^cerrar$/i }).hasAttribute("disabled")).toBe(false);
+    await screen.findByRole("group", { name: /filtrar por estado/i });
   });
 
   it("si otro usuario ya cambió el parte (la función devuelve false), avisa y recarga", async () => {
@@ -129,6 +160,7 @@ describe("TicketList", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/vuelve a iniciar sesión/i);
     expect(alert.textContent).not.toMatch(/authentication/);
+    expect(alert.textContent).toMatch(/no tienes acceso a este parte o tu sesión caducó/i);
   });
 
   it("una transición rechazada (22023) da un mensaje propio, sin el texto del servidor", async () => {

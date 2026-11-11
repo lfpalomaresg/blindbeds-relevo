@@ -6,18 +6,20 @@ import { LIMITS } from "@/lib/validation";
 // que ya cambió de estado no es un error: la función devuelve false.
 export const KNOWN_TICKET_STATUS_CODES = ["42501", "22023"] as const;
 
-const NO_SESSION =
-  "No tienes una sesión válida para cambiar este parte. Vuelve a iniciar sesión; si sigue igual, avisa al administrador.";
+// 42501 llega por la sesión (auth.uid() nulo en la función) o por falta de
+// permiso antes de entrar en ella (p. ej. sin EXECUTE): el texto cubre ambos.
+const NO_ACCESS =
+  "No se pudo cambiar el parte: no tienes acceso a este parte o tu sesión caducó. Recarga la página o vuelve a iniciar sesión; si sigue igual, avisa al administrador.";
 const INVALID_TRANSITION = "Ese cambio de estado no está permitido para este parte. Recarga la página y vuelve a intentarlo.";
 const GENERIC = "No se pudo cambiar el estado del parte. Vuelve a intentarlo en unos segundos.";
 
 /**
  * Mensaje para el error de change_ticket_status. Nunca muestra el texto del
  * servidor (puede nombrar tablas, funciones o políticas internas):
- * 42501 → sesión; 22023 → transición no permitida; lo demás → genérico.
+ * 42501 → sin acceso o sesión caducada; 22023 → transición no permitida; lo demás → genérico.
  */
 export function changeTicketStatusErrorMessage(error: RpcError): string {
-  if (error.code === "42501") return NO_SESSION;
+  if (error.code === "42501") return NO_ACCESS;
   if (error.code === "22023") return INVALID_TRANSITION;
   return GENERIC;
 }
@@ -64,3 +66,7 @@ export function createTicketErrorMessage(error: RpcError): string {
 /** Mensaje para un fallo al subir la foto a Storage: siempre este, nunca el texto del servidor. */
 export const TICKET_PHOTO_UPLOAD_ERROR =
   "No se pudo subir la foto. Revisa la conexión y vuelve a intentarlo, o crea el parte sin foto.";
+
+/** Mensaje cuando el navegador no puede leer la foto elegida (el fichero cambió o ya no existe). */
+export const TICKET_PHOTO_READ_ERROR =
+  "No se pudo leer la foto. Vuelve a elegirla, o crea el parte sin foto.";

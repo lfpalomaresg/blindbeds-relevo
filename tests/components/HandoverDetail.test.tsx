@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../harness/fake-supabase";
 
@@ -118,5 +118,57 @@ describe("HandoverDetail — borrado de un bloque por el admin", () => {
     fireEvent.click(pendientes.getByRole("button", { name: /borrar/i }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/no se pudo borrar/i);
     expect(screen.getByText("Revisar minibar 101")).toBeTruthy();
+  });
+
+  // Un doble toque mandaba dos RPC: la segunda devuelve false (el bloque ya no
+  // existe) y salía «No se pudo borrar» aunque el bloque sí se había borrado.
+  it("un doble toque en «Borrar» envía una sola RPC y no da un aviso falso", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fake = setup({ ...asRole("admin"), rpcResults: { delete_handover_item: { data: true, error: null } } });
+    const pendientes = within(await screen.findByRole("region", { name: /pendientes/i }));
+    const button = pendientes.getByRole("button", { name: /borrar/i });
+    // Los dos clics en el mismo act: sin re-render entre ellos el botón aún no
+    // está desactivado, así que la que frena el segundo es la guarda del componente.
+    act(() => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitFor(() => expect(screen.queryByText("Revisar minibar 101")).toBeNull());
+    expect(fake.rpcCalls.filter((c) => c.fn === "delete_handover_item")).toHaveLength(1);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("mientras se borra, el botón de ese bloque está desactivado y el de otro no", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fake = setup(asRole("admin"));
+    const pendientes = within(await screen.findByRole("region", { name: /pendientes/i }));
+    const avisos = within(screen.getByRole("region", { name: /avisos/i }));
+    let finish: (value: { data: unknown; error: null }) => void = () => {};
+    vi.spyOn(fake, "rpc").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    fireEvent.click(pendientes.getByRole("button", { name: /borrar/i }));
+    await waitFor(() => expect(pendientes.getByRole("button", { name: /borrar/i }).hasAttribute("disabled")).toBe(true));
+    expect(avisos.getByRole("button", { name: /borrar/i }).hasAttribute("disabled")).toBe(false);
+    await act(async () => finish({ data: true, error: null }));
+    await waitFor(() => expect(screen.queryByText("Revisar minibar 101")).toBeNull());
+  });
+
+  it("si la llamada falla por red, avisa y el botón vuelve a funcionar", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fake = setup(asRole("admin"));
+    const pendientes = within(await screen.findByRole("region", { name: /pendientes/i }));
+    const rpc = vi.spyOn(fake, "rpc").mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    fireEvent.click(pendientes.getByRole("button", { name: /borrar/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no se pudo borrar/i);
+    expect(alert.textContent).not.toMatch(/failed|fetch/i);
+    expect(screen.getByText("Revisar minibar 101")).toBeTruthy();
+    const button = pendientes.getByRole("button", { name: /borrar/i });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    // Reintento real: la guarda se liberó y el segundo intento sí borra.
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByText("Revisar minibar 101")).toBeNull());
+    expect(rpc).toHaveBeenCalledTimes(2);
   });
 });
