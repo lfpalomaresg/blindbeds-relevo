@@ -39,6 +39,7 @@ describe("supabase/migrations — solo migraciones secuenciales", () => {
       "000018_handover_item_deletions.sql",
       "000019_item_deletions_retention.sql",
       "000020_item_deletion_log.sql",
+      "000021_create_handover_idempotency.sql",
     ]);
   });
 });

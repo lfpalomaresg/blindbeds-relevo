@@ -47,6 +47,8 @@ const FUNCTION_ACL: Record<string, Expected> = {
   "public.create_ticket(uuid, text, text, text, uuid, text, text)": { anon: false, authenticated: true, service_role: false },
   // 000014: definer que exige auth.uid(); service_role no la necesita.
   "public.create_handover(uuid, text, text, jsonb)": { anon: false, authenticated: true, service_role: false },
+  // 000021: misma protección + clave de idempotencia (la usa la app).
+  "public.create_handover_idempotent(uuid, text, text, jsonb, uuid)": { anon: false, authenticated: true, service_role: false },
   "public.handover_author_emails(uuid, uuid[])": { anon: false, authenticated: true, service_role: false },
   "public.ticket_author_emails(uuid, uuid[])": { anon: false, authenticated: true, service_role: false },
   "public.purge_expired_handovers()": { anon: false, authenticated: false, service_role: true },
@@ -169,7 +171,7 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
     const db = await database("grants_drift");
     await db.query(MANUAL_DRIFT);
     expect(await canExecute(db, "anon", "public.handover_author_emails(uuid, uuid[])")).toBe(true);
-    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018"), migrationFile("000019"), migrationFile("000020")]);
+    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018"), migrationFile("000019"), migrationFile("000020"), migrationFile("000021")]);
     await expectFunctionAcl(db);
   });
 

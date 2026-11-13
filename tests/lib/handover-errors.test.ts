@@ -26,6 +26,21 @@ function currentCreateHandover(): { file: string; body: string } {
 const current = currentCreateHandover();
 const raised22023 = [...current.body.matchAll(/raise exception '([^']+)' using errcode = '22023'/g)].map((m) => m[1]);
 
+const DEFINITION_IDEM = /create or replace function public\.create_handover_idempotent\b[\s\S]*?\$\$;/gi;
+
+/** Última definición de create_handover_idempotent (000021): debe lanzar los mismos 22023. */
+function currentIdempotent(): { file: string; body: string } {
+  let found: { file: string; body: string } | null = null;
+  for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+    for (const m of readFileSync(join(MIGRATIONS, file), "utf8").matchAll(DEFINITION_IDEM)) found = { file, body: m[0] };
+  }
+  if (!found) throw new Error("ninguna migración define public.create_handover_idempotent");
+  return found;
+}
+
+const idem = currentIdempotent();
+const idem22023 = [...idem.body.matchAll(/raise exception '([^']+)' using errcode = '22023'/g)].map((m) => m[1]);
+
 describe("createHandoverErrorMessage", () => {
   it("la definición vigente de create_handover es la de 000017 (si cambia, revisar los textos)", () => {
     expect(current.file).toBe("000017_handover_limits.sql");
@@ -34,6 +49,11 @@ describe("createHandoverErrorMessage", () => {
   it("cubre exactamente los textos 22023 de la definición vigente", () => {
     expect(raised22023.length).toBeGreaterThan(0);
     expect(new Set(Object.keys(LIMIT_MESSAGES))).toEqual(new Set(raised22023));
+  });
+
+  it("la versión idempotente (000021) lanza los mismos textos 22023", () => {
+    expect(idem.file).toBe("000021_create_handover_idempotency.sql");
+    expect(new Set(idem22023)).toEqual(new Set(Object.keys(LIMIT_MESSAGES)));
   });
 
   it("los errores que no son 22023 nunca muestran el texto del servidor", () => {

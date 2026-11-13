@@ -87,28 +87,109 @@ describe("HandoverForm", () => {
 
     await screen.findByText(/relevo registrado/i);
 
-    expect(fake.rpcCalls).toEqual([
-      {
-        fn: "create_handover",
-        args: {
-          p_org_id: ORG,
-          p_department: "pisos",
-          p_shift_type: "noche",
-          p_items: [
-            { block: "pendientes", content: "Revisar minibar 101" },
-            { block: "avisos", content: "Grupo a las 16h" },
-          ],
-        },
-      },
-    ]);
+    expect(fake.rpcCalls).toHaveLength(1);
+    const llamada = fake.rpcCalls[0];
+    const args = llamada.args as Record<string, unknown>;
+    expect(llamada.fn).toBe("create_handover_idempotent");
+    expect(args).toMatchObject({
+      p_org_id: ORG,
+      p_department: "pisos",
+      p_shift_type: "noche",
+      p_items: [
+        { block: "pendientes", content: "Revisar minibar 101" },
+        { block: "avisos", content: "Grupo a las 16h" },
+      ],
+    });
+    expect(String(args.p_idempotency_key)).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     // Nada de inserts sueltos: si el segundo fallara quedaría una cabecera huérfana.
     expect(fake.callsTo("shift_handovers", "insert")).toHaveLength(0);
     expect(fake.callsTo("handover_items", "insert")).toHaveLength(0);
     expect(screen.getByText(/noche/i)).toBeTruthy();
   });
 
+  it("reutiliza la clave en un reintento sin editar y la cambia si se edita", async () => {
+    const fake = setup({
+      user: { id: "user-staff" },
+      rpcResults: { create_handover_idempotent: { data: null, error: { code: "23514", message: "boom" } } },
+    });
+    type(/departamento/i, "pisos");
+    type("Turno", "noche");
+    type(/^pendientes/i, "Uno");
+    submit();
+    await waitFor(() => expect(fake.rpcCalls).toHaveLength(1));
+    // Reintento sin editar: misma clave (un reintento no duplica).
+    submit();
+    await waitFor(() => expect(fake.rpcCalls).toHaveLength(2));
+    const k1 = (fake.rpcCalls[0].args as Record<string, unknown>).p_idempotency_key;
+    const k2 = (fake.rpcCalls[1].args as Record<string, unknown>).p_idempotency_key;
+    expect(k1).toBe(k2);
+    // Editar y reintentar: clave nueva (intento nuevo; no se bloquea con un 22000).
+    type(/^pendientes/i, "Dos");
+    submit();
+    await waitFor(() => expect(fake.rpcCalls).toHaveLength(3));
+    const k3 = (fake.rpcCalls[2].args as Record<string, unknown>).p_idempotency_key;
+    expect(k3).not.toBe(k1);
+  });
+
+  it("usa crypto.randomUUID para la clave (no Math.random)", async () => {
+    const original = globalThis.crypto;
+    vi.stubGlobal("crypto", { ...original, randomUUID: () => "11111111-1111-4111-8111-111111111111" });
+    try {
+      const fake = setup({ user: { id: "user-staff" } });
+      type(/departamento/i, "pisos");
+      type("Turno", "noche");
+      type(/^pendientes/i, "Uno");
+      submit();
+      await screen.findByText(/relevo registrado/i);
+      expect((fake.rpcCalls[0].args as Record<string, unknown>).p_idempotency_key).toBe(
+        "11111111-1111-4111-8111-111111111111",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("dos envíos simultáneos: solo uno llega a la RPC (guarda síncrona)", async () => {
+    const fake = setup({ user: { id: "user-staff" } });
+    type(/departamento/i, "pisos");
+    type("Turno", "noche");
+    type(/^pendientes/i, "Uno");
+    // Primera RPC colgada: el primer envío queda en curso mientras llega el segundo.
+    let llamadas = 0;
+    (fake as unknown as { rpc: () => Promise<unknown> }).rpc = () => {
+      llamadas += 1;
+      return new Promise(() => {});
+    };
+    const form = () => document.querySelector("form")!;
+    fireEvent.submit(form());
+    fireEvent.submit(form()); // el segundo envío llega con el primero aún en curso
+    await Promise.resolve();
+    expect(llamadas).toBe(1);
+  });
+
+  it("tras «Nuevo relevo», el mismo contenido crea un relevo nuevo (clave rotada)", async () => {
+    const fake = setup({ user: { id: "user-staff" } });
+    type(/departamento/i, "pisos");
+    type("Turno", "noche");
+    type(/^pendientes/i, "Mismo texto");
+    submit();
+    await screen.findByText(/relevo registrado/i);
+    fireEvent.click(screen.getByRole("button", { name: /nuevo relevo/i }));
+    // Mismo contenido otra vez: debe ser una operación nueva, no un reintento.
+    type(/departamento/i, "pisos");
+    type("Turno", "noche");
+    type(/^pendientes/i, "Mismo texto");
+    submit();
+    await waitFor(() => expect(fake.rpcCalls).toHaveLength(2));
+    const k1 = (fake.rpcCalls[0].args as Record<string, unknown>).p_idempotency_key;
+    const k2 = (fake.rpcCalls[1].args as Record<string, unknown>).p_idempotency_key;
+    expect(k2).not.toBe(k1);
+  });
+
   it("si create_handover falla muestra un error en castellano sin el texto de la base de datos y no da el relevo por registrado", async () => {
-    const fake = setup({ rpcResults: { create_handover: { data: null, error: { message: "new row violates row-level security policy" } } } });
+    const fake = setup({ rpcResults: { create_handover_idempotent: { data: null, error: { message: "new row violates row-level security policy" } } } });
     type(/^incidencias/i, "Fuga en 204");
     submit();
     await screen.findByText(/no se pudo registrar el relevo/i);
@@ -128,7 +209,7 @@ describe("HandoverForm", () => {
     ["every handover item needs non-empty content", /ningún bloque puede ir vacío/i],
     ["handover item content must be at most 2000 characters", /2000 caracteres/i],
   ])("22023 «%s» → mensaje en castellano, sin el texto en inglés", async (message, expected) => {
-    setup({ rpcResults: { create_handover: { data: null, error: { code: "22023", message } } } });
+    setup({ rpcResults: { create_handover_idempotent: { data: null, error: { code: "22023", message } } } });
     type(/^incidencias/i, "Fuga en 204");
     submit();
     await screen.findByText(expected);
@@ -137,7 +218,7 @@ describe("HandoverForm", () => {
   });
 
   it("22023 con un texto desconocido → mensaje genérico en castellano, sin el texto del servidor", async () => {
-    setup({ rpcResults: { create_handover: { data: null, error: { code: "22023", message: "some new server rule" } } } });
+    setup({ rpcResults: { create_handover_idempotent: { data: null, error: { code: "22023", message: "some new server rule" } } } });
     type(/^incidencias/i, "Fuga en 204");
     submit();
     await screen.findByText(/el servidor ha rechazado el relevo/i);

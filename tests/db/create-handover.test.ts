@@ -21,13 +21,18 @@ import { ANON, RLS_VIOLATION, asUser, errorCodeAs, type Actor } from "../harness
 const ORG_A = "00000000-0000-0000-0000-00000000000a";
 const ORG_B = "00000000-0000-0000-0000-00000000000b";
 const staffA = asUser("aaaaaaaa-0000-0000-0000-00000000001a");
+const supervisorA = asUser("aaaaaaaa-0000-0000-0000-00000000002a");
+const adminA = asUser("aaaaaaaa-0000-0000-0000-00000000003a");
 
 /** Marca para localizar (y limpiar) lo que crea este fichero. El fixture no usa 'fb'. */
 const DEPT = "fb";
 const CHECK_VIOLATION = "23514";
 const INVALID_PARAM = "22023";
 
-const CALL = `select public.create_handover($1, $2, $3, $4::jsonb) as id`;
+const CALL_LEGACY = `select public.create_handover($1, $2, $3, $4::jsonb) as id`;
+// La app usa la versión idempotente; los tests de validación/límites/RLS la ejercitan con clave null.
+const CALL = `select public.create_handover_idempotent($1, $2, $3, $4::jsonb, null::uuid) as id`;
+const CALL_IDEM = `select public.create_handover_idempotent($1, $2, $3, $4::jsonb, $5::uuid) as id`;
 
 const available = gatePg("create-handover.test");
 
@@ -91,6 +96,127 @@ describe.skipIf(!available)("create_handover: cabecera + items en una sola trans
       { org_id: ORG_A, block: "avisos", content: "Grupo a las 16h" },
       { org_id: ORG_A, block: "pendientes", content: "Revisar minibar 101" },
     ]);
+  });
+
+  // 000021: idempotencia (doble clic / reintento tras respuesta perdida).
+  it("misma clave de idempotencia: no duplica (mismo id, un relevo, items una vez)", async () => {
+    const items = [{ block: "pendientes", content: "Uno" }];
+    const clave = "11111111-1111-4111-8111-111111111111";
+    const a = await autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", JSON.stringify(items), clave]);
+    const b = await autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", JSON.stringify(items), clave]);
+    expect(b.rows[0].id).toBe(a.rows[0].id);
+    expect(await committedCounts()).toEqual({ handovers: 1, items: 1 });
+  });
+
+  it("claves distintas: dos relevos distintos", async () => {
+    const items = [{ block: "pendientes", content: "Uno" }];
+    const a = await autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", JSON.stringify(items), "22222222-2222-4222-8222-222222222222"]);
+    const b = await autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", JSON.stringify(items), "33333333-3333-4333-8333-333333333333"]);
+    expect(b.rows[0].id).not.toBe(a.rows[0].id);
+    expect(await committedCounts()).toEqual({ handovers: 2, items: 2 });
+  });
+
+  it("misma clave con petición distinta: se rechaza y no altera nada", async () => {
+    const clave = "44444444-4444-4444-8444-444444444444";
+    const uno = JSON.stringify([{ block: "pendientes", content: "Uno" }]);
+    const dos = JSON.stringify([{ block: "pendientes", content: "Dos" }]);
+    const a = await autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", uno, clave]);
+    // Contenido distinto con la misma clave: no puede devolver el anterior en silencio.
+    await expect(autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", dos, clave])).rejects.toMatchObject({
+      code: "22000",
+    });
+    // Turno distinto con la misma clave: idem.
+    await expect(autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "tarde", uno, clave])).rejects.toMatchObject({
+      code: "22000",
+    });
+    expect(a.rows[0].id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await committedCounts()).toEqual({ handovers: 1, items: 1 });
+  });
+
+  it("otro miembro del mismo hotel reutilizando la clave: rechazo, sin filtrar id ni alterar datos", async () => {
+    const clave = "66666666-6666-4666-8666-666666666666";
+    const items = JSON.stringify([{ block: "pendientes", content: "Uno" }]);
+    await autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", items, clave]);
+    let mensaje = "";
+    try {
+      await autocommitAs(supervisorA, CALL_IDEM, [ORG_A, DEPT, "noche", items, clave]);
+    } catch (error) {
+      mensaje = String((error as { message?: string }).message ?? "");
+    }
+    expect(mensaje).toMatch(/different request/i);
+    // el mensaje no incluye el id del relevo existente
+    const { rows } = await owner.query(`select id from public.shift_handovers where department = $1`, [DEPT]);
+    expect(rows).toHaveLength(1);
+    expect(mensaje).not.toContain(rows[0].id);
+    expect(await committedCounts()).toEqual({ handovers: 1, items: 1 });
+  });
+
+  it("el contenido no queda en la cabecera ni tras borrar el item (solo la huella)", async () => {
+    const secreto = "Contenido sensible 9174";
+    const items = JSON.stringify([{ block: "pendientes", content: secreto }]);
+    const r = await autocommitAs(staffA, CALL_IDEM, [ORG_A, DEPT, "noche", items, "77777777-7777-4777-8777-777777777777"]);
+    const id = r.rows[0].id as string;
+    const item = await owner.query(`select id from public.handover_items where handover_id = $1`, [id]);
+    await autocommitAs(adminA, `select public.delete_handover_item($1) as ok`, [item.rows[0].id]);
+    const left = await owner.query(`select count(*)::int as n from public.handover_items where handover_id = $1`, [id]);
+    expect(left.rows[0].n).toBe(0);
+    const cab = await owner.query(`select row_to_json(h)::text as j from public.shift_handovers h where id = $1`, [id]);
+    expect(cab.rows[0].j).not.toContain(secreto);
+    const del = await owner.query(`select row_to_json(d)::text as j from public.handover_item_deletions d where handover_id = $1`, [id]);
+    expect(del.rows).toHaveLength(1);  // la huella de auditoría existe (si no, el test de abajo sería vacío)
+    expect(del.rows[0].j).not.toContain(secreto);
+  });
+
+  it("la versión antigua de 4 args (000017) sigue disponible (compatibilidad)", async () => {
+    const items = JSON.stringify([{ block: "pendientes", content: "Legacy" }]);
+    const r = await autocommitAs(staffA, CALL_LEGACY, [ORG_A, DEPT, "noche", items]);
+    expect(r.rows[0].id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await committedCounts()).toEqual({ handovers: 1, items: 1 });
+  });
+
+  it("carrera: dos peticiones simultáneas con la misma clave devuelven el mismo id (un relevo)", async () => {
+    const clave = "55555555-5555-4555-8555-555555555555";
+    const items = JSON.stringify([{ block: "pendientes", content: "Carrera" }]);
+    const claims = JSON.stringify({ sub: staffA.userId, role: staffA.role });
+    const c2 = await pg.connect();
+    try {
+      const pid = (await c2.query("select pg_backend_pid() as pid")).rows[0].pid as number;
+      for (const c of [session, c2]) {
+        await c.query("select set_config('request.jwt.claims', $1, false)", [claims]);
+        await c.query("select set_config('request.jwt.claim.sub', $1, false)", [staffA.userId ?? ""]);
+        await c.query(`set role ${staffA.role}`);
+      }
+      await session.query("BEGIN");
+      const a = await session.query(CALL_IDEM, [ORG_A, DEPT, "noche", items, clave]);
+      // c2 llega al INSERT mientras la fila de `session` sigue sin confirmar: espera al índice único.
+      const bPromise = c2.query(CALL_IDEM, [ORG_A, DEPT, "noche", items, clave]);
+      // Barrera: espera a que la segunda sesión esté REALMENTE bloqueada en el índice único.
+      let bloqueada = false;
+      for (let i = 0; i < 100 && !bloqueada; i++) {
+        const { rows } = await owner.query(
+          `select count(*)::int as n from pg_stat_activity where pid = $1 and wait_event_type = 'Lock'`,
+          [pid],
+        );
+        bloqueada = rows[0].n > 0;
+        if (!bloqueada) await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(bloqueada).toBe(true);
+      await session.query("COMMIT");
+      const b = await bPromise;
+      expect(b.rows[0].id).toBe(a.rows[0].id);
+      expect(await committedCounts()).toEqual({ handovers: 1, items: 1 });
+    } finally {
+      await session.query("ROLLBACK").catch(() => {});
+      await session.query("reset role").catch(() => {});
+      await c2.end().catch(() => {});
+    }
+  });
+
+  it("sin clave (null) en la versión idempotente: cada llamada crea un relevo", async () => {
+    const items = [{ block: "pendientes", content: "Uno" }];
+    await autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(items)]);
+    await autocommitAs(staffA, CALL, [ORG_A, DEPT, "noche", JSON.stringify(items)]);
+    expect(await committedCounts()).toEqual({ handovers: 2, items: 2 });
   });
 
   it("si un item es inválido no queda NADA: ni cabecera ni items (0 filas)", async () => {

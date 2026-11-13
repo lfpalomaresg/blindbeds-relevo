@@ -24,7 +24,7 @@ const ORG_A = "00000000-0000-0000-0000-00000000000a";
 const staffA = asUser("aaaaaaaa-0000-0000-0000-00000000001a");
 const adminA = asUser("aaaaaaaa-0000-0000-0000-00000000003a");
 
-const SEQUENCE = ["000011", "000013", "000014", "000016", "000017", "000018", "000019", "000020"];
+const SEQUENCE = ["000011", "000013", "000014", "000016", "000017", "000018", "000019", "000020", "000021"];
 const FIVE_ITEMS = JSON.stringify(
   ["pendientes", "vips", "incidencias", "avisos", "pendientes"].map((block) => ({ block, content: "Texto ficticio" })),
 );

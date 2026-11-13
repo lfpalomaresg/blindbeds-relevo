@@ -1,12 +1,24 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { createHandoverErrorMessage } from "@/lib/handover-errors";
 import { LIMITS, validateHandoverInput } from "@/lib/validation";
 import { FREE_TEXT_NOTICE } from "@/lib/privacy";
 import type { HandoverItem, HandoverBlock, Department, ShiftType } from "@/types";
 import { DEPARTMENTS, SHIFT_TYPES, HANDOVER_BLOCKS } from "@/types";
+
+/** UUID v4 criptografico para la clave de idempotencia (impredecible). */
+function nuevaClaveIdempotencia(): string {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === "function") return c.randomUUID();
+  // Fallback criptografico si el entorno no expone randomUUID.
+  const bytes = c.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const h = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 
 interface HandoverFormProps {
   orgId: string;
@@ -28,6 +40,9 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const idempotencyKey = useRef<{ key: string; content: string }>({ key: nuevaClaveIdempotencia(), content: "" });
+  // Guarda sincrona: evita que dos envios a la vez se intercalen y creen dos relevos.
+  const enviando = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -50,6 +65,7 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (enviando.current) return;  // ya hay un envio en curso: se ignora el segundo
     setError("");
 
     // Validar antes de tocar la red: sin bloques, catálogo o límites incorrectos no hay insert.
@@ -59,33 +75,50 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
       return;
     }
 
+    // Clave atada al contenido, capturada ANTES de cualquier await. Con la guarda
+    // sincrona, dos envios simultaneos no pueden intercalarse ni rotar la clave.
+    // Normalizado igual que lo que se envia (trim + bloques con contenido).
+    const contenido = JSON.stringify({
+      department: validated.value.department,
+      shiftType: validated.value.shiftType,
+      items: validated.value.items,
+    });
+    if (idempotencyKey.current.content !== contenido) {
+      idempotencyKey.current = { key: nuevaClaveIdempotencia(), content: contenido };
+    }
+    const clave = idempotencyKey.current.key;
+    enviando.current = true;
     setSaving(true);
 
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      setError("No hay sesión activa");
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        setError("No hay sesión activa");
+        return;
+      }
+
+      // Cabecera + items en una sola transacción (000006). Desde 000014 es security
+      // definer: la base comprueba la membresía y fija el autor.
+      const { error: rpcError } = await supabase.rpc("create_handover_idempotent", {
+        p_org_id: orgId,
+        p_department: validated.value.department,
+        p_shift_type: validated.value.shiftType,
+        p_items: validated.value.items.map((item) => ({ block: item.block, content: item.content })),
+        p_idempotency_key: clave,
+      });
+
+      if (rpcError) {
+        setError(createHandoverErrorMessage(rpcError));
+        return;
+      }
+
+      // Éxito confirmado: rota la clave (una operación nueva no es un reintento).
+      idempotencyKey.current = { key: nuevaClaveIdempotencia(), content: "" };
+      setDone(true);
+    } finally {
+      enviando.current = false;
       setSaving(false);
-      return;
     }
-
-    // Cabecera + items en una sola transacción (000006): si algo falla no queda
-    // un relevo a medias. Desde 000014 es security definer: la base comprueba
-    // la membresía activa y fija el autor; la app no escribe las tablas.
-    const { error: rpcError } = await supabase.rpc("create_handover", {
-      p_org_id: orgId,
-      p_department: validated.value.department,
-      p_shift_type: validated.value.shiftType,
-      p_items: validated.value.items.map((item) => ({ block: item.block, content: item.content })),
-    });
-
-    if (rpcError) {
-      setError(createHandoverErrorMessage(rpcError));
-      setSaving(false);
-      return;
-    }
-
-    setSaving(false);
-    setDone(true);
   }
 
   if (done) {
@@ -104,6 +137,7 @@ export function HandoverForm({ orgId }: HandoverFormProps) {
           onClick={() => {
             setDone(false);
             setItems(EMPTY_ITEMS);
+            idempotencyKey.current = { key: nuevaClaveIdempotencia(), content: "" };
           }}
           className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
         >
