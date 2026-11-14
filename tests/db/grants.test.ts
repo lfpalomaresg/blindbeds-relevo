@@ -69,9 +69,14 @@ async function canExecute(db: Client, role: string, fn: string): Promise<boolean
   return rows[0].ok;
 }
 
-/** Únicas funciones de public que anon puede ejecutar: los helpers de RLS (las
- * policies sin `to` también se evalúan para anon; sin sesión devuelven vacío/false). */
-const ANON_ALLOWED = ["public.get_user_org_ids()", "public.has_org_role(uuid,text)"];
+/** Únicas funciones de public que anon puede ejecutar: ninguna.
+ *
+ * Hasta el 14/11/2026 esta lista admitía los helpers de RLS
+ * (`get_user_org_ids`, `has_org_role`) con el argumento de que sin sesión
+ * devuelven vacío/false. Cierto, pero es superficie regalada: un helper de
+ * política no necesita EXECUTE para anon si anon ya no tiene privilegios de
+ * tabla. R2 de la auditoría del 14/11. */
+const ANON_ALLOWED: string[] = [];
 
 async function publicFunctions(db: Client): Promise<string[]> {
   const { rows } = await db.query<{ f: string }>(
@@ -153,6 +158,43 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
     }
   });
 
+  // R1 de la auditoría del 14/11: el riesgo no es la fuga de hoy (RLS está en
+  // todas), es la tabla de mañana. `alter default privileges` concedía DML a
+  // anon a TODA tabla futura: una migración que olvide `enable row level
+  // security` nace abierta a internet, sin que nadie lo note.
+  const SUPABASE_DEFAULT_PRIVILEGES = `
+    alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+    alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+  `;
+
+  it("A) anon no tiene ningún privilegio sobre ninguna tabla de public (R1)", async () => {
+    const db = await database("grants_anon_tables", NO_DEFAULT_PRIVILEGES);
+    const tables = await publicTables(db);
+    expect(tables.length).toBeGreaterThanOrEqual(7);
+    for (const t of tables) {
+      for (const priv of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+        const { rows } = await db.query<{ ok: boolean }>(`select has_table_privilege($1, $2, $3) as ok`, ["anon", t, priv]);
+        expect({ t, priv, ok: rows[0].ok }).toEqual({ t, priv, ok: false });
+      }
+    }
+  });
+
+  it("A) con «exponer tablas nuevas» activo, una tabla nueva nace cerrada para anon (R1 estructural)", async () => {
+    const db = await database("grants_anon_future", SUPABASE_DEFAULT_PRIVILEGES);
+    await db.query(`create table public.tabla_futura_de_prueba (id int primary key)`);
+    for (const priv of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+      const { rows } = await db.query<{ ok: boolean }>(`select has_table_privilege($1, $2, $3) as ok`, [
+        "anon",
+        "public.tabla_futura_de_prueba",
+        priv,
+      ]);
+      expect({ priv, ok: rows[0].ok }).toEqual({ priv, ok: false });
+    }
+    // authenticated sí debe poder seguir trabajando en esa tabla.
+    const { rows } = await db.query<{ ok: boolean }>(`select has_table_privilege('authenticated', 'public.tabla_futura_de_prueba', 'SELECT') as ok`);
+    expect(rows[0].ok).toBe(true);
+  });
+
   it("A) RLS sigue activo en todas las tablas de public (los GRANT no lo sustituyen)", async () => {
     const db = await database("grants_rls_on", NO_DEFAULT_PRIVILEGES);
     const { rows } = await db.query<{ t: string }>(
@@ -171,13 +213,16 @@ describe.skipIf(!available)("privilegios y ACL de funciones (000011_grants.sql)"
     const db = await database("grants_drift");
     await db.query(MANUAL_DRIFT);
     expect(await canExecute(db, "anon", "public.handover_author_emails(uuid, uuid[])")).toBe(true);
-    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018"), migrationFile("000019"), migrationFile("000020"), migrationFile("000021")]);
+    await applyFiles(db, [migrationFile("000011"), migrationFile("000013"), migrationFile("000014"), migrationFile("000016"), migrationFile("000017"), migrationFile("000018"), migrationFile("000019"), migrationFile("000020"), migrationFile("000021"), migrationFile("000022")]);
     await expectFunctionAcl(db);
   });
 
   it("C) 000011 es idempotente", async () => {
     const db = await database("grants_idempotent", NO_DEFAULT_PRIVILEGES);
-    await applyFiles(db, [migrationFile("000011"), migrationFile("000011")]);
+    // 000011 + 000022 forman el estado final del repo: 000011 concede lo que
+    // Supabase estándar y 000022 cierra anon. Las dos deben poder reaplicarse.
+    const pareja = [migrationFile("000011"), migrationFile("000022")];
+    await applyFiles(db, [...pareja, ...pareja]);
     await expectFunctionAcl(db);
   });
 });

@@ -164,8 +164,12 @@ describe.skipIf(!available)("RLS sobre Postgres efímero (todas las migraciones)
       expect(await countAs(db, staffB, "ticket_updates", `ticket_id = '${TICKET_A}'`)).toBe(0);
     });
 
-    it.each(ALL_TABLES)("anon no ve nada en %s", async (table) => {
-      expect(await countAs(db, ANON, table)).toBe(0);
+    // Contrato desde 000022 (R1/R2, auditoría 14/11/2026): anon ya no tiene
+    // privilegios sobre las tablas, así que Postgres responde 42501 ANTES de
+    // evaluar RLS. Antes devolvía 0 filas, que es peor: indistinguible de
+    // «no hay datos» y deja el intento sin rastro.
+    it.each(ALL_TABLES)("anon no puede ni consultar %s (42501)", async (table) => {
+      await expect(countAs(db, ANON, table)).rejects.toThrow(/permission denied for table/);
     });
 
     it.each(ALL_TABLES)("usuario autenticado sin membership no ve nada en %s", async (table) => {
